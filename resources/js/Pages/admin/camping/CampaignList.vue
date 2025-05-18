@@ -1,6 +1,7 @@
 <script setup>
 import {Head, useForm} from "@inertiajs/vue3";
 import Pagination from "../../Pagination.vue";
+import {round} from "es-toolkit";
 
 defineProps({
     campaigns: Object
@@ -42,6 +43,7 @@ const confirmDelete = (id) => {
                                     <th>Name</th>
                                     <th>Number List</th>
                                     <th>Voice File</th>
+                                    <th>Number Status</th>
                                     <th>Status</th>
                                     <th>Action</th>
                                 </tr>
@@ -50,15 +52,39 @@ const confirmDelete = (id) => {
                                 <tr v-for="campaign in campaigns.data">
                                     <td>{{ campaign.id }}</td>
                                     <td>{{ campaign.name }}</td>
-                                    <td>{{ campaign.number_list_id }}</td>
-                                    <td>{{ campaign.voice_file_id }}</td>
-                                    <td>{{ campaign.status }}</td>
+                                    <td>{{ campaign.number_list?.name }}</td>
+                                    <td>{{ campaign.voice_file?.name }}</td>
                                     <td>
+                                        <p v-if="campaign.process_status === 'Processing'" class="badge bg-primary">Processing ({{campaign.progress}}%)</p>
+                                        <p v-if="campaign.process_status === 'Failed'" class="badge bg-warning">Failed</p>
+                                        <p v-if="campaign.process_status === 'Processed'" class="badge bg-success">Processed</p>
+                                    </td>
 
-                                        <Link
-                                            :href="route('admin.campaigns.edit', campaign.id)"
+                                    <td class="text-capitalize">
+                                        {{ campaign.status }}
+                                        <span v-if="campaign.status==='running'">
+                                            ({{ campaign.total_numbers > 0
+                                            ? round((campaign.processed_numbers / campaign.total_numbers * 100), 2)
+                                            : 0 }}%)
+                                        </span>
+                                        <span v-if="campaign.status==='paused'" class="d-block">
+                                            ({{ campaign.total_numbers > 0
+                                            ? round((campaign.processed_numbers / campaign.total_numbers * 100), 2)
+                                            : 0 }}% Completed)
+                                        </span>
+                                    </td>
+                                    <td v-if="(campaign.process_status !== 'Processing') && (campaign.status !== 'running')">
+
+                                        <Link method="post" v-if="(campaign.status !== 'completed') && (campaign.status !== 'paused')"
+                                            :href="route('admin.campaigns.launch', campaign.id)"
                                             class="btn btn-sm btn-primary me-2">
-                                            <i class="bx bx-edit"></i>
+                                            Launch
+                                        </Link>
+
+                                        <Link method="post" v-if="(campaign.status !== 'completed') && (campaign.status == 'paused')"
+                                              :href="route('admin.campaigns.resume', campaign.id)"
+                                              class="btn btn-sm btn-primary me-2">
+                                            Resume
                                         </Link>
 
                                         <Link
@@ -67,6 +93,16 @@ const confirmDelete = (id) => {
                                             class="btn btn-sm btn-danger">
                                             <i class="bx bx-trash"></i>
                                         </Link>
+                                    </td>
+                                    <td v-else>
+<!--                                        <i class="bx bx-loader bx-spin"></i>-->
+
+                                        <Link method="post" v-if="(campaign.Processed !== 'completed') && (campaign.status === 'running')"
+                                              :href="route('admin.campaigns.pause', campaign.id)"
+                                              class="btn btn-sm btn-warning me-2">
+                                            Pause
+                                        </Link>
+
                                     </td>
                                 </tr>
 

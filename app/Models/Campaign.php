@@ -6,9 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Campaign extends Model
 {
-    protected $fillable = [
-        'user_id', 'organization_id', 'number_list_id', 'voice_file_id', 'name', 'status', 'dtmf_options'
-    ];
+    protected $guarded = [];
 
     protected $casts = [
         'dtmf_options' => 'array',

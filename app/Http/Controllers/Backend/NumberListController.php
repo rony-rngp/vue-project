@@ -31,10 +31,10 @@ class NumberListController extends Controller
             if ($numberList->batch_id) {
                 $batch = Bus::findBatch($numberList->batch_id);
                 $numberList->progress = $batch ? $batch->progress() : 0;
-                $numberList->status = $batch && $batch->finished() ? 'Completed' : 'Processing';
+                //$numberList->status = $batch && $batch->finished() ? 'Completed' : 'Processing';
             } else {
                 $numberList->progress = 0;
-                $numberList->status = 'Not Started';
+                //$numberList->status = 'Not Started';
             }
 
             return $numberList;

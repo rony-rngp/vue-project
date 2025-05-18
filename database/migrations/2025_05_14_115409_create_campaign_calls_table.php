@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('campaign_calls', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('campaign_id');
+            $table->foreignId('campaign_id')->constrained('campaigns')->onDelete('cascade');
             $table->string('number');  // Directly store the phone number
             $table->enum('status', ['pending', 'dialed', 'answered', 'failed'])->default('pending');
             $table->string('dtmf_input')->nullable();  // Store any DTMF input (if any)

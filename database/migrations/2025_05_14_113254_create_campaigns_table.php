@@ -18,8 +18,13 @@ return new class extends Migration
             $table->unsignedBigInteger('number_list_id');
             $table->unsignedBigInteger('voice_file_id');
             $table->string('name');
-            $table->enum('status', ['draft', 'running', 'paused', 'completed'])->default('draft');
+            $table->string('batch_id')->nullable();
+            $table->string('process_status')->nullable();
+            $table->integer('total_numbers')->default(0);
+            $table->integer('processed_numbers')->default(0);
+            $table->enum('status', ['not_started', 'running', 'paused', 'completed'])->default('draft');
             $table->json('dtmf_options')->nullable(); // Example: {"1": "Transfer", "2": "Repeat"}
+            $table->timestamp('completed_at')->nullable();
             $table->timestamps();
         });
     }
