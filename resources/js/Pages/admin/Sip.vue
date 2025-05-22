@@ -20,6 +20,8 @@ const remoteAudio = ref(null)
 const callStatus = ref('')
 const showTransferInput = ref(false)
 const showConferenceInput = ref(false)
+const dtmfSequence = ref('')
+const isOnHold = ref(false)
 
 let userAgent = null
 let registerer = null
@@ -31,6 +33,10 @@ const appendNumber = (num) => {
     } else {
         targetNumber.value += num
     }
+
+    if (callStatus.value === 'In call') {
+        sendDTMF(num)
+    }
 }
 
 const deleteLastDigit = () => {
@@ -38,6 +44,25 @@ const deleteLastDigit = () => {
         transferNumber.value = transferNumber.value.slice(0, -1)
     } else {
         targetNumber.value = targetNumber.value.slice(0, -1)
+    }
+}
+
+const sendDTMF = (tone) => {
+    if (!currentSession) return
+
+    try {
+        currentSession.sessionDescriptionHandler.sendDtmf(tone)
+        dtmfSequence.value += tone
+        callStatus.value = `Sent DTMF: ${dtmfSequence.value}`
+
+        setTimeout(() => {
+            if (callStatus.value.includes('Sent DTMF')) {
+                callStatus.value = 'In call'
+            }
+        }, 1000)
+    } catch (error) {
+        console.error('DTMF failed:', error)
+        callStatus.value = 'DTMF failed'
     }
 }
 
@@ -53,12 +78,14 @@ const makeCall = async () => {
     const inviter = new Inviter(userAgent, targetURI)
     currentSession = inviter
     callStatus.value = 'Calling...'
+    dtmfSequence.value = ''
 
     try {
         await inviter.invite()
     } catch (error) {
         console.error('Call failed:', error)
         callStatus.value = 'Call failed'
+        currentSession = null
         return
     }
 
@@ -71,6 +98,8 @@ const makeCall = async () => {
             currentSession = null
             showTransferInput.value = false
             showConferenceInput.value = false
+            dtmfSequence.value = ''
+            isOnHold.value = false
         }
     })
 }
@@ -78,14 +107,55 @@ const makeCall = async () => {
 const hangupCall = async () => {
     if (currentSession) {
         try {
-            await currentSession.bye?.()
+            await currentSession.bye()
         } catch (error) {
             console.error('Hangup failed:', error)
+        } finally {
+            callStatus.value = 'Call ended'
+            currentSession = null
+            showTransferInput.value = false
+            showConferenceInput.value = false
+            isOnHold.value = false
         }
-        callStatus.value = 'Call ended'
-        currentSession = null
-        showTransferInput.value = false
-        showConferenceInput.value = false
+    }
+}
+
+const toggleHold = async () => {
+    if (!currentSession) return
+
+    try {
+        const sdh = currentSession.sessionDescriptionHandler
+        const pc = sdh.peerConnection
+
+        if (isOnHold.value) {
+            // Resume call
+            pc.getSenders().forEach(sender => {
+                if (sender.track && sender.track.kind === 'audio') {
+                    sender.track.enabled = true
+                }
+            })
+            isOnHold.value = false
+            callStatus.value = 'In call'
+
+            // Send re-INVITE to resume
+            await currentSession.invite()
+        } else {
+            // Hold call
+            pc.getSenders().forEach(sender => {
+                if (sender.track && sender.track.kind === 'audio') {
+                    sender.track.enabled = false
+                }
+            })
+            isOnHold.value = true
+            callStatus.value = 'Call on hold'
+
+            // Send re-INVITE to hold
+            await currentSession.invite()
+        }
+    } catch (error) {
+        console.error('Hold failed:', error)
+        callStatus.value = 'Hold failed'
+        isOnHold.value = false
     }
 }
 
@@ -168,6 +238,7 @@ onMounted(async () => {
             },
             sessionDescriptionHandlerFactoryOptions: {
                 constraints: {audio: true, video: false},
+                dtmfType: 'info',
             },
         })
 
@@ -184,6 +255,9 @@ onMounted(async () => {
 
 onBeforeUnmount(async () => {
     try {
+        if (currentSession) {
+            await currentSession.bye()
+        }
         await registerer?.unregister()
         await userAgent?.stop()
     } catch (error) {
@@ -191,6 +265,7 @@ onBeforeUnmount(async () => {
     }
 })
 </script>
+
 
 <template>
     <div class="dialer-container">
@@ -210,6 +285,7 @@ onBeforeUnmount(async () => {
                 v-model="transferNumber"
                 placeholder="Enter number to transfer to"
                 class="transfer-input"
+                @keyup.enter="transferCall"
             />
             <div class="transfer-buttons">
                 <button @click="transferCall" class="btn-transfer">Transfer</button>
@@ -222,6 +298,7 @@ onBeforeUnmount(async () => {
                 v-model="transferNumber"
                 placeholder="Enter number to conference"
                 class="conference-input"
+                @keyup.enter="startConference"
             />
             <div class="conference-buttons">
                 <button @click="startConference" class="btn-conference">Add to Conference</button>
@@ -245,12 +322,30 @@ onBeforeUnmount(async () => {
         </div>
 
         <div class="action-buttons">
-            <button v-if="callStatus !== 'Calling...' && callStatus !== 'In call'"
+            <button v-if="callStatus !== 'Calling...' && callStatus !== 'In call' && callStatus !== 'Call on hold'"
                     class="call-button" @click="makeCall">📞</button>
 
             <div v-if="callStatus === 'In call'" class="call-controls">
                 <button class="btn-transfer" @click="showTransferInput = true">Transfer</button>
                 <button class="btn-conference" @click="showConferenceInput = true">Conference</button>
+                <button
+                    class="btn-hold"
+                    @click="toggleHold"
+                    :class="{ 'btn-active': isOnHold }"
+                >
+                    {{ isOnHold ? 'Resume' : 'Hold' }}
+                </button>
+                <button class="btn-hangup" @click="hangupCall">Hang Up</button>
+            </div>
+
+            <div v-if="callStatus === 'Call on hold'" class="call-controls">
+                <button
+                    class="btn-hold"
+                    @click="toggleHold"
+                    :class="{ 'btn-active': isOnHold }"
+                >
+                    {{ isOnHold ? 'Resume' : 'Hold' }}
+                </button>
                 <button class="btn-hangup" @click="hangupCall">Hang Up</button>
             </div>
 
@@ -351,8 +446,10 @@ onBeforeUnmount(async () => {
 
 .call-controls {
     display: flex;
+    flex-wrap: wrap;
     gap: 10px;
     margin-top: 10px;
+    justify-content: center;
 }
 
 .btn-transfer {
@@ -371,6 +468,19 @@ onBeforeUnmount(async () => {
     padding: 8px 15px;
     border-radius: 5px;
     cursor: pointer;
+}
+
+.btn-hold {
+    background: #f0ad4e;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.btn-active {
+    background: #5bc0de;
 }
 
 .btn-hangup {

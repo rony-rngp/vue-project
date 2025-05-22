@@ -120,7 +120,7 @@ class CampaignController extends Controller
     public function show(string $id)
     {
         $campaign = Campaign::with(['number_list', 'voice_file'])->where('organization_id', auth()->user()->organization_id)
-            ->where('user_id', auth()->id())->first();
+            ->where('user_id', auth()->id())->where('id', $id)->first();
         $campaign_calls = CampaignCall::where('campaign_id', $campaign->id)->paginate(100);
         return Inertia::render('admin/camping/CampaingDetails', [
             'campaign' => $campaign,
