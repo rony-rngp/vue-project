@@ -28,9 +28,9 @@ class AuthController extends Controller
     {
         return Inertia::render('admin/Sip', [
             'sipUser' => '1001',
-            'sipPassword' => 'yourpassword',
-            'sipServer' => 'wss://yourdomain.com:8089/ws',
-            'sipDomain' => 'yourdomain.com',
+            'sipPassword' => '46b9de07cd3025ab5fcc6bcbe43a4c66',
+            'sipServer' => 'wss://pbx1.asteriskbd.com:8089/ws',
+            'sipDomain' => 'pbx1.asteriskbd.com',
         ]);
     }
 

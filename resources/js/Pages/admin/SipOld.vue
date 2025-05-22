@@ -15,30 +15,19 @@ const props = defineProps({
 })
 
 const targetNumber = ref('')
-const transferNumber = ref('')
 const remoteAudio = ref(null)
 const callStatus = ref('')
-const showTransferInput = ref(false)
-const showConferenceInput = ref(false)
 
 let userAgent = null
 let registerer = null
 let currentSession = null
 
 const appendNumber = (num) => {
-    if (showTransferInput.value || showConferenceInput.value) {
-        transferNumber.value += num
-    } else {
-        targetNumber.value += num
-    }
+    targetNumber.value += num
 }
 
 const deleteLastDigit = () => {
-    if (showTransferInput.value || showConferenceInput.value) {
-        transferNumber.value = transferNumber.value.slice(0, -1)
-    } else {
-        targetNumber.value = targetNumber.value.slice(0, -1)
-    }
+    targetNumber.value = targetNumber.value.slice(0, -1)
 }
 
 const makeCall = async () => {
@@ -69,8 +58,6 @@ const makeCall = async () => {
         } else if (state === SessionState.Terminated) {
             callStatus.value = 'Call ended'
             currentSession = null
-            showTransferInput.value = false
-            showConferenceInput.value = false
         }
     })
 }
@@ -84,51 +71,6 @@ const hangupCall = async () => {
         }
         callStatus.value = 'Call ended'
         currentSession = null
-        showTransferInput.value = false
-        showConferenceInput.value = false
-    }
-}
-
-const transferCall = async () => {
-    if (!currentSession || !transferNumber.value) return
-
-    try {
-        const targetURI = UserAgent.makeURI(`sip:${transferNumber.value}@${props.sipDomain}`)
-        if (!targetURI) {
-            callStatus.value = 'Invalid transfer number'
-            return
-        }
-
-        await currentSession.refer(targetURI)
-        callStatus.value = `Transferring to ${transferNumber.value}`
-        showTransferInput.value = false
-        transferNumber.value = ''
-    } catch (error) {
-        console.error('Transfer failed:', error)
-        callStatus.value = 'Transfer failed'
-    }
-}
-
-const startConference = async () => {
-    if (!currentSession || !transferNumber.value) return
-
-    try {
-        const targetURI = UserAgent.makeURI(`sip:${transferNumber.value}@${props.sipDomain}`)
-        if (!targetURI) {
-            callStatus.value = 'Invalid conference number'
-            return
-        }
-
-        const inviter = new Inviter(userAgent, targetURI)
-        callStatus.value = `Adding ${transferNumber.value} to conference`
-
-        await inviter.invite()
-        showConferenceInput.value = false
-        transferNumber.value = ''
-        callStatus.value = `Conference with ${transferNumber.value}`
-    } catch (error) {
-        console.error('Conference failed:', error)
-        callStatus.value = 'Conference failed'
     }
 }
 
@@ -194,39 +136,26 @@ onBeforeUnmount(async () => {
 
 <template>
     <div class="dialer-container">
+<!--        <div class="contact-header">
+            <div class="avatar">BS</div>
+            <div class="info">
+                <strong>Benjamin Schmitt</strong><br>
+                <small>+1 831 200 <span class="text-warning">1112</span></small>
+            </div>
+            <div class="call-icon" @click="makeCall" title="Call">
+                📞
+            </div>
+        </div>-->
+
         <div class="dial-display" style="display: flex; width: 100%; gap: 10px">
+
             <div style="width: 100%">
-                {{ showTransferInput || showConferenceInput ?
-                (transferNumber !== '' ? transferNumber : 'Enter Number') :
-                (targetNumber !== '' ? targetNumber : 'Enter Number') }}
+                {{ targetNumber !== '' ? targetNumber : 'Enter Number' }}
             </div>
             <div class="">
                 <button style="background: #0E1B2B; color: white; border: 0" @click="deleteLastDigit">x</button>
             </div>
-        </div>
 
-        <div v-if="showTransferInput && callStatus === 'In call'" class="transfer-ui">
-            <input
-                v-model="transferNumber"
-                placeholder="Enter number to transfer to"
-                class="transfer-input"
-            />
-            <div class="transfer-buttons">
-                <button @click="transferCall" class="btn-transfer">Transfer</button>
-                <button @click="showTransferInput = false" class="btn-cancel">Cancel</button>
-            </div>
-        </div>
-
-        <div v-if="showConferenceInput && callStatus === 'In call'" class="conference-ui">
-            <input
-                v-model="transferNumber"
-                placeholder="Enter number to conference"
-                class="conference-input"
-            />
-            <div class="conference-buttons">
-                <button @click="startConference" class="btn-conference">Add to Conference</button>
-                <button @click="showConferenceInput = false" class="btn-cancel">Cancel</button>
-            </div>
         </div>
 
         <div class="dialpad">
@@ -244,18 +173,10 @@ onBeforeUnmount(async () => {
             <button @click="appendNumber('#')">#</button>
         </div>
 
-        <div class="action-buttons">
-            <button v-if="callStatus !== 'Calling...' && callStatus !== 'In call'"
-                    class="call-button" @click="makeCall">📞</button>
+        <div class="text-center mt-3">
+            <button v-if="callStatus.value !== 'Calling...' && callStatus.value !== 'In call'" class="call-button " @click="makeCall">📞</button>
 
-            <div v-if="callStatus === 'In call'" class="call-controls">
-                <button class="btn-transfer" @click="showTransferInput = true">Transfer</button>
-                <button class="btn-conference" @click="showConferenceInput = true">Conference</button>
-                <button class="btn-hangup" @click="hangupCall">Hang Up</button>
-            </div>
-
-            <button v-if="callStatus === 'Calling...'"
-                    class="btn-hangup" @click="hangupCall">Hang Up</button>
+            <button v-if="callStatus.value === 'Calling...' || callStatus.value ==='In call'" class="btn btn-danger btn-sm mt-2" @click="hangupCall">Hang Up</button>
         </div>
 
         <p class="footer mt-3 text-center">
@@ -267,6 +188,7 @@ onBeforeUnmount(async () => {
 </template>
 
 <style scoped>
+
 .dialer-container {
     background: #0e1b2b;
     color: white;
@@ -277,14 +199,50 @@ onBeforeUnmount(async () => {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
+.contact-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    background: #15273f;
+    padding: 10px;
+    border-radius: 10px;
+}
+
+.avatar {
+    background: #33475b;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 16px;
+}
+
+.info {
+    margin-left: 10px;
+    flex-grow: 1;
+}
+
+.call-icon {
+    background: #e4ffcb;
+    color: #132f00;
+    border-radius: 50%;
+    width: 35px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
 .dial-display {
     font-size: 28px;
     text-align: center;
     margin: 10px 0;
     color: #b0ff1a;
-    background: #15273f;
-    padding: 10px;
-    border-radius: 10px;
 }
 
 .dialpad {
@@ -302,7 +260,6 @@ onBeforeUnmount(async () => {
     padding: 10px;
     border-radius: 10px;
     transition: background 0.2s;
-    background: #15273f;
 }
 
 .dialpad button:hover {
@@ -318,80 +275,5 @@ onBeforeUnmount(async () => {
     font-size: 24px;
     color: black;
     cursor: pointer;
-}
-
-.transfer-ui, .conference-ui {
-    background: #15273f;
-    padding: 15px;
-    border-radius: 10px;
-    margin: 10px 0;
-}
-
-.transfer-input, .conference-input {
-    width: 100%;
-    padding: 8px;
-    border-radius: 5px;
-    border: 1px solid #33475b;
-    background: #0e1b2b;
-    color: white;
-    margin-bottom: 10px;
-}
-
-.transfer-buttons, .conference-buttons {
-    display: flex;
-    gap: 10px;
-}
-
-.action-buttons {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-}
-
-.call-controls {
-    display: flex;
-    gap: 10px;
-    margin-top: 10px;
-}
-
-.btn-transfer {
-    background: #4a6da7;
-    color: white;
-    border: none;
-    padding: 8px 15px;
-    border-radius: 5px;
-    cursor: pointer;
-}
-
-.btn-conference {
-    background: #5a9e5f;
-    color: white;
-    border: none;
-    padding: 8px 15px;
-    border-radius: 5px;
-    cursor: pointer;
-}
-
-.btn-hangup {
-    background: #d9534f;
-    color: white;
-    border: none;
-    padding: 8px 15px;
-    border-radius: 5px;
-    cursor: pointer;
-}
-
-.btn-cancel {
-    background: #6c757d;
-    color: white;
-    border: none;
-    padding: 8px 15px;
-    border-radius: 5px;
-    cursor: pointer;
-}
-
-.footer {
-    color: #b0ff1a;
 }
 </style>

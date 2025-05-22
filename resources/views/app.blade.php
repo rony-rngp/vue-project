@@ -49,17 +49,30 @@
 <!-- Main JS -->
 <script src="{{ asset('admin/assets') }}/js/main.js"></script>
 
-<script>
+{{--<script>
     document.addEventListener('DOMContentLoaded', function () {
-        const menuEl = document.querySelector('#layout-menu') // or '.menu'
+        const menuEl = document.querySelector('#layout-menu');
         if (menuEl) {
             const menuInstance = new Menu(menuEl, {
                 accordion: true,
                 animate: true
-            })
-            window.MenuInstance = menuInstance
+            });
+            window.MenuInstance = menuInstance;
         }
-    })
-</script>
+
+        let menuTogglers = document.querySelectorAll('.layout-menu-toggle');
+        menuTogglers.forEach(toggler => {
+            toggler.addEventListener('click', e => {
+                e.preventDefault();
+                if (window.Helpers && window.Helpers.toggleCollapsed) {
+                    window.Helpers.toggleCollapsed();
+                }
+            });
+        });
+    });
+
+
+</script>--}}
+
 </body>
 </html>

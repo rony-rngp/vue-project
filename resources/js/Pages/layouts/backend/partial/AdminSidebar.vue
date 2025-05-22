@@ -1,26 +1,6 @@
 <script setup>
 import {useSettings} from "../../../admin/useSettings.js";
-import {onMounted, watch} from "vue";
 const {getSettings} = useSettings();
-
-// This runs when component mounts and every time route changes
-function activateMenuFromUrl() {
-    const currentUrl = page.url.value || window.location.pathname
-
-    // Loop through sidebar items and toggle based on URL
-    document.querySelectorAll('.menu-item').forEach(item => {
-        item.classList.remove('active', 'open')
-
-        const link = item.querySelector('a.menu-link')
-        if (link && link.href && link.href.includes(currentUrl)) {
-            item.classList.add('active', 'open')
-            const submenu = item.querySelector('.menu-sub')
-            if (submenu) submenu.style.display = 'block'
-        }
-    })
-}
-
-
 
 </script>
 

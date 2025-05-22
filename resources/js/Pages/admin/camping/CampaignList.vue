@@ -81,10 +81,16 @@ const confirmDelete = (id) => {
                                             Launch
                                         </Link>
 
-                                        <Link method="post" v-if="(campaign.status !== 'completed') && (campaign.status == 'paused')"
+                                        <Link method="post" v-if="(campaign.status !== 'completed') && (campaign.status === 'paused')"
                                               :href="route('admin.campaigns.resume', campaign.id)"
                                               class="btn btn-sm btn-primary me-2">
                                             Resume
+                                        </Link>
+
+                                        <Link
+                                              :href="route('admin.campaigns.show', campaign.id)"
+                                              class="btn btn-sm btn-success me-2">
+                                            View
                                         </Link>
 
                                         <Link
@@ -95,12 +101,24 @@ const confirmDelete = (id) => {
                                         </Link>
                                     </td>
                                     <td v-else>
-<!--                                        <i class="bx bx-loader bx-spin"></i>-->
 
-                                        <Link method="post" v-if="(campaign.Processed !== 'completed') && (campaign.status === 'running')"
+                                        <Link method="post" v-if="(campaign.status === 'running')"
                                               :href="route('admin.campaigns.pause', campaign.id)"
                                               class="btn btn-sm btn-warning me-2">
                                             Pause
+                                        </Link>
+
+                                        <Link v-if="(campaign.process_status === 'Processed')"
+                                              :href="route('admin.campaigns.show', campaign.id)"
+                                              class="btn btn-sm btn-success me-2">
+                                            View
+                                        </Link>
+
+                                        <Link v-if="(campaign.process_status === 'Processed')"
+                                            @click="confirmDelete(campaign.id)"
+                                            href="#"
+                                            class="btn btn-sm btn-danger">
+                                            <i class="bx bx-trash"></i>
                                         </Link>
 
                                     </td>

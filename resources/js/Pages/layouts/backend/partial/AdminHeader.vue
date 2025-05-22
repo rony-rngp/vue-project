@@ -61,7 +61,7 @@
                             </a>
                         </li>
                         <li>
-                            <a class="dropdown-item" href=""> <i class="bx bx-cog bx-md me-3"></i><span>Settings</span> </a>
+                            <Link class="dropdown-item" :href="route('admin.settings')"> <i class="bx bx-cog bx-md me-3"></i><span>Settings</span> </Link>
                         </li>
 
                         <li>

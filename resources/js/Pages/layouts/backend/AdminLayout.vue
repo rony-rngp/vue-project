@@ -4,12 +4,37 @@ import {Head} from "@inertiajs/vue3";
 import AdminHeader from "./partial/AdminHeader.vue";
 import AdminSidebar from "./partial/AdminSidebar.vue";
 
-import { watch } from 'vue'
+import {onMounted, watch} from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import { useToast } from 'vue-toast-notification'
 
 const page = usePage()
 const toast = useToast()
+
+const initMenu = () => {
+    const menuEl = document.querySelector('#layout-menu');
+    if (menuEl) {
+        const menuInstance = new Menu(menuEl, {
+            accordion: true,
+            animate: true,
+        });
+        window.MenuInstance = menuInstance;
+    }
+
+    let menuTogglers = document.querySelectorAll('.layout-menu-toggle');
+    menuTogglers.forEach(toggler => {
+        toggler.addEventListener('click', e => {
+            e.preventDefault();
+            if (window.Helpers && window.Helpers.toggleCollapsed) {
+                window.Helpers.toggleCollapsed();
+            }
+        });
+    });
+}
+
+onMounted(() => {
+    initMenu();
+});
 
 watch(
     () => page.props.flash,
