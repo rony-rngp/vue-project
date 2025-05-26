@@ -26,9 +26,16 @@ class AuthController extends Controller
 
     public function sip()
     {
+        if (Auth::id() == 2){
+            $user = '1001';
+            $pass = '46b9de07cd3025ab5fcc6bcbe43a4c66';
+        }else{
+            $user = '1002';
+            $pass = 'd79da2cb92adaade8532d630d5662763';
+        }
         return Inertia::render('admin/Sip', [
-            'sipUser' => '1001',
-            'sipPassword' => '46b9de07cd3025ab5fcc6bcbe43a4c66',
+            'sipUser' => $user,
+            'sipPassword' => $pass,
             'sipServer' => 'wss://pbx1.asteriskbd.com:8089/ws',
             'sipDomain' => 'pbx1.asteriskbd.com',
         ]);

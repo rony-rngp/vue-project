@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import {
     UserAgent,
     Registerer,
@@ -14,16 +14,23 @@ const props = defineProps({
     sipDomain: String,
 })
 
+// State variables
 const targetNumber = ref('')
 const transferNumber = ref('')
 const remoteAudio = ref(null)
-const callStatus = ref('')
-const showTransferInput = ref(false)
-const showConferenceInput = ref(false)
+const callStatus = ref('Ready')
 const dtmfSequence = ref('')
 
+// Boolean state flags
+const showTransferInput = ref(false)
+const showConferenceInput = ref(false)
 const isCalling = ref(false)
+const isIncomingCall = ref(false)
+const isActiveCall = ref(false)
 const isOnHold = ref(false)
+const isInConference = ref(false)
+const isMuted = ref(false);
+
 
 let userAgent = null
 let registerer = null
@@ -31,12 +38,33 @@ let currentSession = null
 let conferenceSession = null
 let conferenceStream = new MediaStream()
 
+// Computed properties for button states
+const showCallButton = computed(() =>
+    !isCalling.value && !isActiveCall.value && !isIncomingCall.value && targetNumber.value.length > 0
+)
+
+const showHangupButton = computed(() =>
+    isCalling.value || isActiveCall.value || isIncomingCall.value
+)
+
+const showTransferButton = computed(() =>
+    isActiveCall.value && !showTransferInput.value && !isInConference.value
+)
+
+const showConferenceButton = computed(() =>
+    isActiveCall.value && !showConferenceInput.value && !isInConference.value
+)
+
+const showHoldButton = computed(() =>
+    isActiveCall.value && !showTransferInput.value && !showConferenceInput.value
+)
+
 const appendNumber = (num) => {
     if (showTransferInput.value || showConferenceInput.value) {
         transferNumber.value += num
     } else {
         targetNumber.value += num
-        if (callStatus.value === 'In call') sendDTMF(num)
+        if (isActiveCall.value) sendDTMF(num)
     }
 }
 
@@ -72,49 +100,103 @@ const makeCall = async () => {
         return
     }
 
+    isCalling.value = true
     const inviter = new Inviter(userAgent, targetURI)
     currentSession = inviter
     callStatus.value = 'Calling...'
     dtmfSequence.value = ''
 
-    try {
-        await inviter.invite()
-    } catch (error) {
-        console.error('Call failed:', error)
-        callStatus.value = 'Call failed'
-        currentSession = null
-        return
-    }
-
+    // Setup state listeners before sending invite
     inviter.stateChange.addListener((state) => {
+        console.log('Call state changed to:', state)
         if (state === SessionState.Established) {
+            isCalling.value = false
+            isActiveCall.value = true
             callStatus.value = 'In call'
             playRemoteAudio(inviter)
         } else if (state === SessionState.Terminated) {
             callStatus.value = 'Call ended'
-            currentSession = null
-            showTransferInput.value = false
-            showConferenceInput.value = false
-            dtmfSequence.value = ''
-            isOnHold.value = false
+            resetCallState()
         }
     })
+
+    try {
+        await inviter.invite({
+            sessionDescriptionHandlerOptions: {
+                constraints: {audio: true, video: false}
+            }
+        })
+    } catch (error) {
+        console.error('Call failed:', error)
+        callStatus.value = 'Call failed'
+        resetCallState()
+    }
 }
+
+const answerCall = async () => {
+    if (!currentSession) return
+    try {
+        await currentSession.accept({
+            sessionDescriptionHandlerOptions: {
+                constraints: {audio: true, video: false}
+            }
+        })
+        isIncomingCall.value = false
+        isActiveCall.value = true
+        callStatus.value = 'In call'
+        playRemoteAudio(currentSession)
+    } catch (e) {
+        console.error('Answer failed', e)
+        callStatus.value = 'Failed to answer call'
+        resetCallState()
+    }
+}
+
+const cancelCall = async () => {
+    try {
+        if (!currentSession) return;
+
+        const state = currentSession.state;
+
+        if (state === SessionState.Initial || state === SessionState.Establishing) {
+            // Cancel the outgoing INVITE (before call is established)
+            await currentSession.cancel();
+        } else if (state === SessionState.Established) {
+            // Call fully established, end the call with BYE
+            await currentSession.bye();
+        } else {
+            console.warn('Session is in unexpected state:', state);
+        }
+    } catch (error) {
+        console.error('Cancel/hangup call failed:', error);
+    } finally {
+        resetCallState();
+        callStatus.value = 'Call ended';
+    }
+};
 
 const hangupCall = async () => {
     try {
-        if (currentSession) await currentSession.bye()
-        if (conferenceSession) await conferenceSession.bye()
+        if (currentSession) {
+            if (currentSession.state === 'Established') {
+                await currentSession.bye()
+            } else if (currentSession.state === 'Initial') {
+                await currentSession.reject()
+            }
+        }
+
+        if (conferenceSession) {
+            if (conferenceSession.state === 'Established') {
+                await conferenceSession.bye()
+            } else if (conferenceSession.state === 'Initial') {
+                await conferenceSession.reject()
+            }
+        }
     } catch (e) {
         console.error('Hangup failed', e)
     } finally {
-        currentSession = null
-        conferenceSession = null
         callStatus.value = 'Call ended'
-        showTransferInput.value = false
-        showConferenceInput.value = false
-        isOnHold.value = false
-        conferenceStream = new MediaStream()
+        resetCallState()
     }
 }
 
@@ -134,6 +216,23 @@ const toggleHold = async () => {
         callStatus.value = 'Hold failed'
     }
 }
+
+const toggleMute = () => {
+    if (!currentSession) return;
+
+    const pc = currentSession.sessionDescriptionHandler.peerConnection;
+    if (!pc) return;
+
+    // Get all local audio tracks
+    const senders = pc.getSenders();
+    senders.forEach(sender => {
+        if (sender.track && sender.track.kind === 'audio') {
+            sender.track.enabled = isMuted.value; // Toggle mute
+        }
+    });
+
+    isMuted.value = !isMuted.value;
+};
 
 const transferCall = async () => {
     if (!currentSession || !transferNumber.value) return
@@ -164,9 +263,8 @@ const startConference = async () => {
 
         const inviter = new Inviter(userAgent, targetURI)
         conferenceSession = inviter
+        isInConference.value = true
         callStatus.value = `Calling ${transferNumber.value} to join conference...`
-
-        await inviter.invite()
 
         inviter.stateChange.addListener((state) => {
             if (state === SessionState.Established) {
@@ -175,14 +273,17 @@ const startConference = async () => {
             } else if (state === SessionState.Terminated) {
                 callStatus.value = 'Conference call ended'
                 conferenceSession = null
+                isInConference.value = false
             }
         })
 
+        await inviter.invite()
         transferNumber.value = ''
         showConferenceInput.value = false
     } catch (error) {
         console.error('Conference failed:', error)
         callStatus.value = 'Conference failed'
+        isInConference.value = false
     }
 }
 
@@ -213,9 +314,24 @@ const playRemoteAudio = (session) => {
             if (receiver.track) remoteStream.addTrack(receiver.track)
         })
         remoteAudio.value.srcObject = remoteStream
+        remoteAudio.value.play().catch(e => console.error('Audio play failed:', e))
     } catch (error) {
         console.error('Audio setup failed:', error)
     }
+}
+
+const resetCallState = () => {
+    isCalling.value = false
+    isIncomingCall.value = false
+    isActiveCall.value = false
+    isOnHold.value = false
+    isInConference.value = false
+    showTransferInput.value = false
+    showConferenceInput.value = false
+    currentSession = null
+    conferenceSession = null
+    dtmfSequence.value = ''
+    conferenceStream = new MediaStream()
 }
 
 onMounted(async () => {
@@ -223,24 +339,55 @@ onMounted(async () => {
         const uri = UserAgent.makeURI(`sip:${props.sipUser}@${props.sipDomain}`)
         userAgent = new UserAgent({
             uri,
-            transportOptions: { server: props.sipServer },
+            transportOptions: {
+                server: props.sipServer
+            },
             authorizationUsername: props.sipUser,
             authorizationPassword: props.sipPassword,
             delegate: {
                 onInvite: async (invitation) => {
-                    callStatus.value = `Incoming call from ${invitation.remoteIdentity.uri.user}`
-                    currentSession = invitation
-                    try {
-                        await invitation.accept()
-                        playRemoteAudio(invitation)
-                        callStatus.value = 'In call'
-                    } catch (e) {
-                        callStatus.value = 'Failed to accept call'
+
+                    if (isDND.value) {
+                        // Automatically reject the call
+                        await invitation.reject();
+                        callStatus.value = `Call from ${invitation.remoteIdentity.uri.user} rejected due to DND`;
+                        return;
                     }
+
+                    currentSession = invitation
+                    isIncomingCall.value = true
+                    callStatus.value = `Incoming call from ${invitation.remoteIdentity.uri.user}`
+
+                    // 💡 Add onCancel to react if caller cancels the call
+                    invitation.delegate = {
+                        onCancel: () => {
+                            console.log('Caller canceled the call')
+                            callStatus.value = 'Caller canceled the call'
+                            isIncomingCall.value = false
+                            resetCallState()
+                        }
+                    }
+
+                    // Attach session state listener
+                    invitation.stateChange.addListener((state) => {
+                        console.log('Incoming call state:', state)
+                        if (state === SessionState.Established) {
+                            isIncomingCall.value = false
+                            isActiveCall.value = true
+                            callStatus.value = 'In call'
+                            playRemoteAudio(invitation)
+                        } else if (state === SessionState.Terminated) {
+                            callStatus.value = 'Call ended'
+                            resetCallState()
+                        }
+                    })
                 }
             },
             sessionDescriptionHandlerFactoryOptions: {
-                constraints: { audio: true, video: false },
+                constraints: {audio: true, video: false},
+                peerConnectionConfiguration: {
+                    iceServers: [{urls: 'stun:stun.l.google.com:19302'}]
+                },
                 dtmfType: 'info',
             },
         })
@@ -248,7 +395,6 @@ onMounted(async () => {
         await userAgent.start()
         registerer = new Registerer(userAgent)
         await registerer.register()
-
         callStatus.value = 'Ready'
     } catch (error) {
         console.error('SIP init error:', error)
@@ -266,105 +412,161 @@ onBeforeUnmount(async () => {
         console.error('Cleanup error:', error)
     }
 })
+
+const isDND = ref(false);
+
+const toggleDND = () => {
+    isDND.value = !isDND.value;
+    if (isDND.value) {
+        callStatus.value = 'DND enabled: Incoming calls will be rejected';
+    } else {
+        callStatus.value = 'DND disabled';
+    }
+};
+
+
 </script>
 
-
-
 <template>
-    <div class="dialer-container">
-        <div class="dial-display" style="display: flex; width: 100%; gap: 10px">
-            <div style="width: 100%">
-                {{ showTransferInput || showConferenceInput ?
-                (transferNumber !== '' ? transferNumber : 'Enter Number') :
-                (targetNumber !== '' ? targetNumber : 'Enter Number') }}
-            </div>
-            <div class="">
-                <button style="background: #0E1B2B; color: white; border: 0" @click="deleteLastDigit">x</button>
-            </div>
+    <div class="container-xxl flex-grow-1 container-p-y">
+        <div class="">
+            <button @click="toggleDND" class="btn btn-sm float-end" :class="isDND ? 'btn-warning':'btn-primary'">
+                {{ isDND ? 'Disable DND' : 'Enable DND' }}
+            </button>
         </div>
-
-        <div v-if="showTransferInput && callStatus === 'In call'" class="transfer-ui">
-            <input
-                v-model="transferNumber"
-                placeholder="Enter number to transfer to"
-                class="transfer-input"
-                @keyup.enter="transferCall"
-            />
-            <div class="transfer-buttons">
-                <button @click="transferCall" class="btn-transfer">Transfer</button>
-                <button @click="showTransferInput = false" class="btn-cancel">Cancel</button>
+        <div class="dialer-container">
+            <div class="dial-display" style="display: flex; width: 100%; gap: 10px">
+                <div style="width: 100%">
+                    {{
+                        showTransferInput || showConferenceInput ?
+                            (transferNumber !== '' ? transferNumber : 'Enter Number') :
+                            (targetNumber !== '' ? targetNumber : 'Enter Number')
+                    }}
+                </div>
+                <div class="">
+                    <button style="background: #0E1B2B; color: white; border: 0" @click="deleteLastDigit">x</button>
+                </div>
             </div>
-        </div>
 
-        <div v-if="showConferenceInput && callStatus === 'In call'" class="conference-ui">
-            <input
-                v-model="transferNumber"
-                placeholder="Enter number to conference"
-                class="conference-input"
-                @keyup.enter="startConference"
-            />
-            <div class="conference-buttons">
-                <button @click="startConference" class="btn-conference">Add to Conference</button>
-                <button @click="showConferenceInput = false" class="btn-cancel">Cancel</button>
+            <div v-if="showTransferInput && isActiveCall" class="transfer-ui">
+                <input
+                    v-model="transferNumber"
+                    placeholder="Enter number to transfer to"
+                    class="transfer-input"
+                    @keyup.enter="transferCall"
+                />
+                <div class="transfer-buttons">
+                    <button @click="transferCall" class="btn-transfer">Transfer</button>
+                    <button @click="showTransferInput = false" class="btn-cancel">Cancel</button>
+                </div>
             </div>
-        </div>
 
-        <div class="dialpad">
-            <button @click="appendNumber('1')">1</button>
-            <button @click="appendNumber('2')">2<br><small>ABC</small></button>
-            <button @click="appendNumber('3')">3<br><small>DEF</small></button>
-            <button @click="appendNumber('4')">4<br><small>GHI</small></button>
-            <button @click="appendNumber('5')">5<br><small>JKL</small></button>
-            <button @click="appendNumber('6')">6<br><small>MNO</small></button>
-            <button @click="appendNumber('7')">7<br><small>PQRS</small></button>
-            <button @click="appendNumber('8')">8<br><small>TUV</small></button>
-            <button @click="appendNumber('9')">9<br><small>WXYZ</small></button>
-            <button @click="appendNumber('*')">*</button>
-            <button @click="appendNumber('0')">0</button>
-            <button @click="appendNumber('#')">#</button>
-        </div>
+            <div v-if="showConferenceInput && isActiveCall" class="conference-ui">
+                <input
+                    v-model="transferNumber"
+                    placeholder="Enter number to conference"
+                    class="conference-input"
+                    @keyup.enter="startConference"
+                />
+                <div class="conference-buttons">
+                    <button @click="startConference" class="btn-conference">Add to Conference</button>
+                    <button @click="showConferenceInput = false" class="btn-cancel">Cancel</button>
+                </div>
+            </div>
 
-        <div class="action-buttons">
-            <button v-if="callStatus !== 'Calling...' && callStatus !== 'In call' && callStatus !== 'Call on hold'"
-                    class="call-button" @click="makeCall">📞</button>
+            <div class="dialpad">
+                <button @click="appendNumber('1')">1</button>
+                <button @click="appendNumber('2')">2<br><small>ABC</small></button>
+                <button @click="appendNumber('3')">3<br><small>DEF</small></button>
+                <button @click="appendNumber('4')">4<br><small>GHI</small></button>
+                <button @click="appendNumber('5')">5<br><small>JKL</small></button>
+                <button @click="appendNumber('6')">6<br><small>MNO</small></button>
+                <button @click="appendNumber('7')">7<br><small>PQRS</small></button>
+                <button @click="appendNumber('8')">8<br><small>TUV</small></button>
+                <button @click="appendNumber('9')">9<br><small>WXYZ</small></button>
+                <button @click="appendNumber('*')">*</button>
+                <button @click="appendNumber('0')">0</button>
+                <button @click="appendNumber('#')">#</button>
+            </div>
 
-            <div v-if="callStatus === 'In call'" class="call-controls">
-                <button class="btn-transfer" @click="showTransferInput = true">Transfer</button>
-                <button class="btn-conference" @click="showConferenceInput = true">Conference</button>
+            <div class="action-buttons">
+                <!-- Call button -->
                 <button
-                    class="btn-hold"
-                    @click="toggleHold"
-                    :class="{ 'btn-active': isOnHold }"
+                    v-if="showCallButton"
+                    class="call-button"
+                    @click="makeCall"
                 >
-                    {{ isOnHold ? 'Resume' : 'Hold' }}
+                    📞
                 </button>
-                <button class="btn-hangup" @click="hangupCall">Hang Up</button>
-            </div>
 
-            <div v-if="callStatus === 'Call on hold'" class="call-controls">
+                <!-- Incoming call buttons -->
+                <div v-if="isIncomingCall" class="call-controls">
+                    <button class="btn-accept" @click="answerCall">Answer</button>
+                    <button class="btn-hangup" @click="hangupCall">Decline</button>
+                </div>
+
+                <!-- Active call controls -->
+                <div v-if="isActiveCall" class="call-controls">
+                    <button
+                        v-if="showTransferButton"
+                        class="btn-transfer"
+                        @click="showTransferInput = true; showConferenceInput = false"
+                    >
+                        Transfer
+                    </button>
+                    <button
+                        v-if="showConferenceButton"
+                        class="btn-conference"
+                        @click="showConferenceInput = true; showTransferInput = false"
+                    >
+                        Conference
+                    </button>
+                    <button
+                        v-if="showHoldButton"
+                        class="btn-hold"
+                        @click="toggleHold"
+                        :class="{ 'btn-active': isOnHold }"
+                    >
+                        {{ isOnHold ? 'Resume' : 'Hold' }}
+                    </button>
+
+                    <button class="btn-transfer" @click="toggleMute">{{ isMuted ? 'Unmute' : 'Mute' }}</button>
+
+                    <button class="btn-hangup" @click="hangupCall">Hang Up</button>
+                </div>
+
+                <!-- Outgoing call hangup -->
                 <button
-                    class="btn-hold"
-                    @click="toggleHold"
-                    :class="{ 'btn-active': isOnHold }"
+                    v-if="isCalling"
+                    class="btn-hangup"
+                    @click="cancelCall"
                 >
-                    {{ isOnHold ? 'Resume' : 'Hold' }}
+                    Cancel Call
                 </button>
-                <button class="btn-hangup" @click="hangupCall">Hang Up</button>
             </div>
 
-            <button v-if="callStatus === 'Calling...'"
-                    class="btn-hangup" @click="hangupCall">Hang Up</button>
+            <p class="footer mt-3 text-center">
+                <small>Status: {{ callStatus }}</small>
+            </p>
+
+            <audio ref="remoteAudio" autoplay hidden></audio>
         </div>
-
-        <p class="footer mt-3 text-center">
-            <small>Status: {{ callStatus }}</small>
-        </p>
-
-        <audio ref="remoteAudio" autoplay hidden></audio>
     </div>
+
 </template>
 
 <style scoped>
+/* Add this new style for the answer button */
+.btn-accept {
+    background: #5a9e5f;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+/* Keep all your existing styles */
 .dialer-container {
     background: #0e1b2b;
     color: white;
