@@ -21,21 +21,22 @@ const callStatus = ref('')
 const showTransferInput = ref(false)
 const showConferenceInput = ref(false)
 const dtmfSequence = ref('')
+
+const isCalling = ref(false)
 const isOnHold = ref(false)
 
 let userAgent = null
 let registerer = null
 let currentSession = null
+let conferenceSession = null
+let conferenceStream = new MediaStream()
 
 const appendNumber = (num) => {
     if (showTransferInput.value || showConferenceInput.value) {
         transferNumber.value += num
     } else {
         targetNumber.value += num
-    }
-
-    if (callStatus.value === 'In call') {
-        sendDTMF(num)
+        if (callStatus.value === 'In call') sendDTMF(num)
     }
 }
 
@@ -49,16 +50,12 @@ const deleteLastDigit = () => {
 
 const sendDTMF = (tone) => {
     if (!currentSession) return
-
     try {
         currentSession.sessionDescriptionHandler.sendDtmf(tone)
         dtmfSequence.value += tone
         callStatus.value = `Sent DTMF: ${dtmfSequence.value}`
-
         setTimeout(() => {
-            if (callStatus.value.includes('Sent DTMF')) {
-                callStatus.value = 'In call'
-            }
+            if (callStatus.value.includes('Sent DTMF')) callStatus.value = 'In call'
         }, 1000)
     } catch (error) {
         console.error('DTMF failed:', error)
@@ -105,74 +102,51 @@ const makeCall = async () => {
 }
 
 const hangupCall = async () => {
-    if (currentSession) {
-        try {
-            await currentSession.bye()
-        } catch (error) {
-            console.error('Hangup failed:', error)
-        } finally {
-            callStatus.value = 'Call ended'
-            currentSession = null
-            showTransferInput.value = false
-            showConferenceInput.value = false
-            isOnHold.value = false
-        }
+    try {
+        if (currentSession) await currentSession.bye()
+        if (conferenceSession) await conferenceSession.bye()
+    } catch (e) {
+        console.error('Hangup failed', e)
+    } finally {
+        currentSession = null
+        conferenceSession = null
+        callStatus.value = 'Call ended'
+        showTransferInput.value = false
+        showConferenceInput.value = false
+        isOnHold.value = false
+        conferenceStream = new MediaStream()
     }
 }
 
 const toggleHold = async () => {
     if (!currentSession) return
-
     try {
-        const sdh = currentSession.sessionDescriptionHandler
-        const pc = sdh.peerConnection
-
-        if (isOnHold.value) {
-            // Resume call
-            pc.getSenders().forEach(sender => {
-                if (sender.track && sender.track.kind === 'audio') {
-                    sender.track.enabled = true
-                }
-            })
-            isOnHold.value = false
-            callStatus.value = 'In call'
-
-            // Send re-INVITE to resume
-            await currentSession.invite()
-        } else {
-            // Hold call
-            pc.getSenders().forEach(sender => {
-                if (sender.track && sender.track.kind === 'audio') {
-                    sender.track.enabled = false
-                }
-            })
-            isOnHold.value = true
-            callStatus.value = 'Call on hold'
-
-            // Send re-INVITE to hold
-            await currentSession.invite()
-        }
-    } catch (error) {
-        console.error('Hold failed:', error)
+        const pc = currentSession.sessionDescriptionHandler.peerConnection
+        const enabled = !isOnHold.value
+        pc.getSenders().forEach(sender => {
+            if (sender.track && sender.track.kind === 'audio') sender.track.enabled = enabled
+        })
+        await currentSession.invite()
+        isOnHold.value = !isOnHold.value
+        callStatus.value = isOnHold.value ? 'Call on hold' : 'In call'
+    } catch (e) {
+        console.error('Hold failed', e)
         callStatus.value = 'Hold failed'
-        isOnHold.value = false
     }
 }
 
 const transferCall = async () => {
     if (!currentSession || !transferNumber.value) return
-
     try {
         const targetURI = UserAgent.makeURI(`sip:${transferNumber.value}@${props.sipDomain}`)
         if (!targetURI) {
             callStatus.value = 'Invalid transfer number'
             return
         }
-
         await currentSession.refer(targetURI)
         callStatus.value = `Transferring to ${transferNumber.value}`
-        showTransferInput.value = false
         transferNumber.value = ''
+        showTransferInput.value = false
     } catch (error) {
         console.error('Transfer failed:', error)
         callStatus.value = 'Transfer failed'
@@ -180,8 +154,7 @@ const transferCall = async () => {
 }
 
 const startConference = async () => {
-    if (!currentSession || !transferNumber.value) return
-
+    if (!currentSession || !transferNumber.value || !userAgent) return
     try {
         const targetURI = UserAgent.makeURI(`sip:${transferNumber.value}@${props.sipDomain}`)
         if (!targetURI) {
@@ -190,15 +163,45 @@ const startConference = async () => {
         }
 
         const inviter = new Inviter(userAgent, targetURI)
-        callStatus.value = `Adding ${transferNumber.value} to conference`
+        conferenceSession = inviter
+        callStatus.value = `Calling ${transferNumber.value} to join conference...`
 
         await inviter.invite()
-        showConferenceInput.value = false
+
+        inviter.stateChange.addListener((state) => {
+            if (state === SessionState.Established) {
+                callStatus.value = `Conference ongoing`
+                mixConferenceAudio(currentSession, inviter)
+            } else if (state === SessionState.Terminated) {
+                callStatus.value = 'Conference call ended'
+                conferenceSession = null
+            }
+        })
+
         transferNumber.value = ''
-        callStatus.value = `Conference with ${transferNumber.value}`
+        showConferenceInput.value = false
     } catch (error) {
         console.error('Conference failed:', error)
         callStatus.value = 'Conference failed'
+    }
+}
+
+const mixConferenceAudio = (session1, session2) => {
+    try {
+        conferenceStream = new MediaStream()
+        const peer1 = session1.sessionDescriptionHandler.peerConnection
+        const peer2 = session2.sessionDescriptionHandler.peerConnection
+
+        peer1.getReceivers().forEach(receiver => {
+            if (receiver.track) conferenceStream.addTrack(receiver.track)
+        })
+        peer2.getReceivers().forEach(receiver => {
+            if (receiver.track) conferenceStream.addTrack(receiver.track)
+        })
+
+        remoteAudio.value.srcObject = conferenceStream
+    } catch (e) {
+        console.error('Conference audio mix failed', e)
     }
 }
 
@@ -206,7 +209,7 @@ const playRemoteAudio = (session) => {
     try {
         const peer = session.sessionDescriptionHandler.peerConnection
         const remoteStream = new MediaStream()
-        peer.getReceivers().forEach((receiver) => {
+        peer.getReceivers().forEach(receiver => {
             if (receiver.track) remoteStream.addTrack(receiver.track)
         })
         remoteAudio.value.srcObject = remoteStream
@@ -220,7 +223,7 @@ onMounted(async () => {
         const uri = UserAgent.makeURI(`sip:${props.sipUser}@${props.sipDomain}`)
         userAgent = new UserAgent({
             uri,
-            transportOptions: {server: props.sipServer},
+            transportOptions: { server: props.sipServer },
             authorizationUsername: props.sipUser,
             authorizationPassword: props.sipPassword,
             delegate: {
@@ -231,13 +234,13 @@ onMounted(async () => {
                         await invitation.accept()
                         playRemoteAudio(invitation)
                         callStatus.value = 'In call'
-                    } catch (error) {
+                    } catch (e) {
                         callStatus.value = 'Failed to accept call'
                     }
-                },
+                }
             },
             sessionDescriptionHandlerFactoryOptions: {
-                constraints: {audio: true, video: false},
+                constraints: { audio: true, video: false },
                 dtmfType: 'info',
             },
         })
@@ -255,9 +258,8 @@ onMounted(async () => {
 
 onBeforeUnmount(async () => {
     try {
-        if (currentSession) {
-            await currentSession.bye()
-        }
+        if (currentSession) await currentSession.bye()
+        if (conferenceSession) await conferenceSession.bye()
         await registerer?.unregister()
         await userAgent?.stop()
     } catch (error) {
@@ -265,6 +267,7 @@ onBeforeUnmount(async () => {
     }
 })
 </script>
+
 
 
 <template>
