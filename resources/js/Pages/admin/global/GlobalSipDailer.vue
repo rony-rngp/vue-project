@@ -618,13 +618,13 @@ const stopAudio = () => {
 const serviceWorker = () => {
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.addEventListener('message', (event) => {
-          //  console.log('Message from Service Worker:', event.data);
+           console.log('Message from Service Worker:', event.data);
 
-            const action = event.data?.action;
+            const type = event.data?.type;
 
-            if (action === 'answer') {
+            if (type === 'ANSWER_CALL') {
                 answerCall()
-            } else if (action === 'reject') {
+            } else if (type === 'REJECT_CALL') {
                 hangupCall();
             }
         });
@@ -643,7 +643,7 @@ const showIncomingNotification = () => {
                     requireInteraction: true,
                     actions: [
                         { action: 'answer', title: 'Answer' },
-                        { action: 'reject', title: 'Hangup'}
+                        { action: 'reject', title: 'Hangup' }
                     ],
                     tag: 'sip-incoming-call'
                 });
