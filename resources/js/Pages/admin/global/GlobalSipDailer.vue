@@ -180,23 +180,38 @@ const makeCall = async () => {
     }
 }
 
+const waitForSessionReady = () => {
+    return new Promise((resolve, reject) => {
+        const maxAttempts = 10;
+        let attempts = 0;
+        const interval = setInterval(() => {
+            if (!currentSession) return reject('No session found');
+            if (
+                currentSession.state === SessionState.Initial ||
+                currentSession.state === SessionState.Establishing
+            ) {
+                clearInterval(interval);
+                resolve();
+            } else if (++attempts >= maxAttempts) {
+                clearInterval(interval);
+                reject('Session not ready in time');
+            }
+        }, 300);
+    });
+};
+
 const answerCall = async () => {
     if (!currentSession) {
         callStatus.value = 'No call to answer';
         return;
     }
 
-    // Check if session is in a state that can be answered
-    if (currentSession.state !== SessionState.Initial &&
-        currentSession.state !== SessionState.Establishing) {
-        callStatus.value = 'Cannot answer call in current state';
-        return;
-    }
-
     try {
+        await waitForSessionReady();
+
         await currentSession.accept({
             sessionDescriptionHandlerOptions: {
-                constraints: {audio: true, video: false}
+                constraints: { audio: true, video: false }
             }
         });
 
@@ -206,17 +221,10 @@ const answerCall = async () => {
         playRemoteAudio(currentSession);
     } catch (e) {
         console.error('Answer failed', e);
-
-        // More specific error handling
-        if (e.message.includes('Invalid session state')) {
-            callStatus.value = 'Please wait for call to be ready';
-        } else {
-            callStatus.value = 'Failed to answer call';
-        }
-
+        callStatus.value = 'Failed to answer call';
         resetCallState();
     }
-}
+};
 
 const cancelCall = async () => {
     try {
@@ -243,28 +251,54 @@ const cancelCall = async () => {
 
 const hangupCall = async () => {
     try {
+        // Hang up currentSession
         if (currentSession) {
-            if (currentSession.state === 'Established') {
-                await currentSession.bye()
-            } else if (currentSession.state === 'Initial') {
-                await currentSession.reject()
+            if (currentSession.state === SessionState.Established) {
+                await currentSession.bye();
+            } else if (currentSession.state === SessionState.Initial || currentSession.state === SessionState.Establishing) {
+                await currentSession.cancel?.();
+                await currentSession.reject?.();
             }
+            cleanupSession(currentSession);
+            currentSession = null;
         }
 
+        // Hang up conferenceSession
         if (conferenceSession) {
-            if (conferenceSession.state === 'Established') {
-                await conferenceSession.bye()
-            } else if (conferenceSession.state === 'Initial') {
-                await conferenceSession.reject()
+            if (conferenceSession.state === SessionState.Established) {
+                await conferenceSession.bye();
+            } else if (conferenceSession.state === SessionState.Initial || conferenceSession.state === SessionState.Establishing) {
+                await conferenceSession.cancel?.();
+                await conferenceSession.reject?.();
             }
+            cleanupSession(conferenceSession);
+            conferenceSession = null;
         }
     } catch (e) {
-        console.error('Hangup failed', e)
+        console.error('Hangup failed:', e);
     } finally {
-        callStatus.value = 'Call ended'
-        resetCallState()
+        if (remoteAudio.value) {
+            remoteAudio.value.pause();
+            remoteAudio.value.srcObject = null;
+        }
+
+        callStatus.value = 'Call ended';
+        resetCallState();
+    }
+};
+
+// Helper to clean up PeerConnection tracks
+function cleanupSession(session) {
+    const pc = session?.sessionDescriptionHandler?.peerConnection;
+    if (pc && pc.connectionState !== 'closed') {
+        pc.getSenders().forEach(s => s.track?.stop());
+        pc.getReceivers().forEach(r => r.track?.stop());
+        pc.close();
     }
 }
+
+
+
 
 const toggleHold = async () => {
     if (!currentSession) return
@@ -373,21 +407,32 @@ const mixConferenceAudio = (session1, session2) => {
 }
 
 const playRemoteAudio = (session) => {
-    try {
-        const peer = session.sessionDescriptionHandler.peerConnection
-        const remoteStream = new MediaStream()
-        peer.getReceivers().forEach(receiver => {
-            if (receiver.track) remoteStream.addTrack(receiver.track)
-        })
-        remoteAudio.value.srcObject = remoteStream
-        remoteAudio.value.play().catch(e => console.error('Audio play failed:', e))
-    } catch (error) {
-        console.error('Audio setup failed:', error)
+    const remoteStream = new MediaStream();
+
+    const pc = session.sessionDescriptionHandler?.peerConnection;
+    if (!pc) return;
+
+    pc.getReceivers().forEach(receiver => {
+        if (receiver.track && receiver.track.kind === 'audio') {
+            remoteStream.addTrack(receiver.track);
+        }
+    });
+
+    if (remoteAudio.value) {
+        remoteAudio.value.srcObject = null; // Clear before reassigning
+        remoteAudio.value.srcObject = remoteStream;
+
+        // Wait a short delay before playing to avoid AbortError
+        setTimeout(() => {
+            remoteAudio.value.play().catch(error => {
+                console.warn('Audio play failed:', error);
+            });
+        }, 100); // 100ms delay usually works
     }
-}
+};
 
 const resetCallState = () => {
-    isCalling.value = false
+   /* isCalling.value = false
     isIncomingCall.value = false
     isActiveCall.value = false
     isOnHold.value = false
@@ -397,7 +442,29 @@ const resetCallState = () => {
     currentSession = null
     conferenceSession = null
     dtmfSequence.value = ''
-    conferenceStream = new MediaStream()
+    conferenceStream = new MediaStream()*/
+
+    isCalling.value = false;
+    isIncomingCall.value = false;
+    isActiveCall.value = false;
+    isOnHold.value = false;
+    isMuted.value = false;
+    isInConference.value = false;
+    showTransferInput.value = false;
+    showConferenceInput.value = false;
+    dtmfSequence.value = '';
+    targetNumber.value = '';
+    transferNumber.value = '';
+
+    if (currentSession?.sessionDescriptionHandler?.peerConnection) {
+        currentSession.sessionDescriptionHandler.peerConnection.close();
+    }
+
+    if (remoteAudio.value) {
+        remoteAudio.value.srcObject = null;
+    }
+
+    currentSession = null;
 }
 
 
