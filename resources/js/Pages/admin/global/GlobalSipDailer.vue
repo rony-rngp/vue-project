@@ -1,12 +1,10 @@
 <script setup>
-import {ref, onMounted, onBeforeUnmount, computed, reactive} from 'vue'
-import {
-    UserAgent,
-    Registerer,
-    Inviter,
-    SessionState,
-} from 'sip.js'
+import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
+import {Inviter, Registerer, SessionState, UserAgent,} from 'sip.js'
 import {usePage} from "@inertiajs/vue3";
+import {useSipStore} from "../../../Stores/sipStore.js";
+
+const sipStore = useSipStore();
 
 const page = usePage();
 const sipUser = page.props.sipUser
@@ -32,6 +30,7 @@ const isActiveCall = ref(false)
 const isOnHold = ref(false)
 const isInConference = ref(false)
 const isMuted = ref(false);
+const incomingNumber = ref(false);
 
 
 let userAgent = null
@@ -182,21 +181,40 @@ const makeCall = async () => {
 }
 
 const answerCall = async () => {
-    if (!currentSession) return
+    if (!currentSession) {
+        callStatus.value = 'No call to answer';
+        return;
+    }
+
+    // Check if session is in a state that can be answered
+    if (currentSession.state !== SessionState.Initial &&
+        currentSession.state !== SessionState.Establishing) {
+        callStatus.value = 'Cannot answer call in current state';
+        return;
+    }
+
     try {
         await currentSession.accept({
             sessionDescriptionHandlerOptions: {
                 constraints: {audio: true, video: false}
             }
-        })
-        isIncomingCall.value = false
-        isActiveCall.value = true
-        callStatus.value = 'In call'
-        playRemoteAudio(currentSession)
+        });
+
+        isIncomingCall.value = false;
+        isActiveCall.value = true;
+        callStatus.value = 'In call';
+        playRemoteAudio(currentSession);
     } catch (e) {
-        console.error('Answer failed', e)
-        callStatus.value = 'Failed to answer call'
-        resetCallState()
+        console.error('Answer failed', e);
+
+        // More specific error handling
+        if (e.message.includes('Invalid session state')) {
+            callStatus.value = 'Please wait for call to be ready';
+        } else {
+            callStatus.value = 'Failed to answer call';
+        }
+
+        resetCallState();
     }
 }
 
@@ -382,9 +400,23 @@ const resetCallState = () => {
     conferenceStream = new MediaStream()
 }
 
-onMounted(async () => {
 
-    //loadCallHistory();
+onMounted(async () => {
+    loadCallHistory();
+    sipStore.loadDND();
+
+    document.addEventListener('click', initializeAudio, { once: true });
+
+    serviceWorker();
+
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    const permissionsGranted = await checkPermissions();
+    if (!permissionsGranted) {
+        await requestMicrophonePermission();
+       /* callStatus.value = 'Please allow microphone permissions';
+        return;*/
+    }
 
     try {
         const uri = UserAgent.makeURI(`sip:${sipUser}@${sipDomain}`)
@@ -397,68 +429,73 @@ onMounted(async () => {
             authorizationPassword: sipPassword,
             delegate: {
                 onInvite: async (invitation) => {
+                    const fromNumber = invitation.remoteIdentity.uri.user;
 
-                    const fromNumber = invitation.remoteIdentity.uri.user
-
-                    if (isDND.value) {
-                        // Automatically reject the call
+                    if (sipStore.isDND) {
                         await invitation.reject();
                         callStatus.value = `Call from ${invitation.remoteIdentity.uri.user} rejected due to DND`;
                         return;
                     }
 
-                    currentSession = invitation
-                    isIncomingCall.value = true
-                    callStatus.value = `Incoming call from ${invitation.remoteIdentity.uri.user}`
+                    // Store the invitation and update UI
+                    currentSession = invitation;
+                    isIncomingCall.value = true;
+                    incomingNumber.value = invitation.remoteIdentity.uri.user;
+                    callStatus.value = `Incoming call from ${invitation.remoteIdentity.uri.user}`;
 
-                    //add call history
+                    // Add call history
                     let incomingCallEntry = {
                         type: 'incoming',
                         number: fromNumber,
                         status: 'pending',
                         time: new Date().toISOString()
-                    }
-                    callHistory.value.unshift(incomingCallEntry)
-                    saveCallHistory()
+                    };
+                    callHistory.value.unshift(incomingCallEntry);
+                    saveCallHistory();
 
-                    // Add onCancel to react if caller cancels the call
+                    // Add state change listener
+                    invitation.stateChange.addListener((state) => {
+                        console.log('Incoming call state:', state);
+
+                        if (state === SessionState.Established) {
+                            isIncomingCall.value = false;
+                            isActiveCall.value = true;
+                            callStatus.value = 'In call';
+                            playRemoteAudio(invitation);
+                            incomingCallEntry.status = 'answered';
+                            saveCallHistory();
+                        }
+                        else if (state === SessionState.Terminated) {
+                            if (incomingCallEntry.status === 'pending') {
+                                incomingCallEntry.status = 'missed';
+                                saveCallHistory();
+                            }
+                            callStatus.value = 'Call ended';
+                            resetCallState();
+                        }
+                    });
+
+                    // Add delegate methods
                     invitation.delegate = {
                         onCancel: () => {
-                            console.log('Caller canceled the call')
-                            callStatus.value = 'Caller canceled the call'
-                            isIncomingCall.value = false
-                            resetCallState()
+                            console.log('Caller canceled the call');
+                            callStatus.value = 'Caller canceled the call';
+                            isIncomingCall.value = false;
+                            incomingCallEntry.status = 'missed';
+                            saveCallHistory();
+                            resetCallState();
+                        },
 
-                            //add call history
-                            incomingCallEntry.status = 'missed'
-                            saveCallHistory()
+                        // Add this to handle the session state properly
+                        onNotify: () => {
+                            console.log('Received NOTIFY for invitation');
+                        },
 
+                        // This helps track when the session is ready to be answered
+                        onAccept: () => {
+                            console.log('Session is ready to be answered');
                         }
-                    }
-
-                    // Attach session state listener
-                    invitation.stateChange.addListener((state) => {
-                        console.log('Incoming call state:', state)
-                        if (state === SessionState.Established) {
-                            isIncomingCall.value = false
-                            isActiveCall.value = true
-                            callStatus.value = 'In call'
-                            playRemoteAudio(invitation)
-
-                            incomingCallEntry.status = 'answered'
-                            saveCallHistory()
-
-                        } else if (state === SessionState.Terminated) {
-
-                            if (incomingCallEntry.status === 'pending') {
-                                incomingCallEntry.status = 'missed'
-                                saveCallHistory()
-                            }
-
-                            callStatus.value = 'Call ended'
-                            resetCallState()
-                        }
-                    })
+                    };
                 }
             },
             sessionDescriptionHandlerFactoryOptions: {
@@ -478,6 +515,8 @@ onMounted(async () => {
         console.error('SIP init error:', error)
         callStatus.value = 'SIP connection failed'
     }
+
+
 })
 
 onBeforeUnmount(async () => {
@@ -491,23 +530,143 @@ onBeforeUnmount(async () => {
     }
 })
 
-const isDND = ref(false);
+const checkPermissions = async () => {
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        if (devices.some(device => !device.deviceId)) {
+            // Permission not granted
+            return false;
+        }
+        return true;
+    } catch (error) {
 
-const toggleDND = () => {
-    isDND.value = !isDND.value;
-    if (isDND.value) {
-        callStatus.value = 'DND enabled: Incoming calls will be rejected';
-    } else {
-        callStatus.value = 'DND disabled';
+        console.error('Permission check failed:', error);
+        return false;
     }
 };
 
+const requestMicrophonePermission = async () => {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Permission granted - you can now use the microphone
+        stream.getTracks().forEach(track => track.stop()); // Clean up if you don't need the stream immediately
+        return true;
+    } catch (error) {
+        console.error('Microphone access denied:', error);
+        return false;
+    }
+}
 
+
+const emit = defineEmits(['incoming-call']);
+
+watch(isIncomingCall, (newVal) => {
+    emit('incoming-call', newVal);
+});
+
+// Watch for incoming calls
+watch(isIncomingCall, (newVal) => {
+    if (newVal) {
+        showIncomingNotification();
+        playAudio();
+    } else {
+        stopAudio();
+    }
+});
+
+
+//for audio tune
+const audioRef = ref(null)
+const audioSource = ref('../../../../../tune.wav') // Change this to your actual path
+const initAudio = ref(false);
+
+const initializeAudio = () => {
+
+    audioRef.value.muted = true;
+
+    audioRef.value.play().then(() => {
+        audioRef.value.pause();
+        audioRef.value.currentTime = 0;
+        initAudio.value = true;
+        audioRef.value.muted = false;
+
+        console.log("Audio initialized successfully!");
+
+    }).catch(err => {
+        console.error('Audio initialization failed:', err);
+    });
+};
+
+const playAudio = () => {
+    if (audioRef.value && initAudio.value === true) {
+        audioRef.value.play().catch(err => {
+            console.error('Play failed:', err)
+        });
+        audioRef.value.loop = true;
+    }
+}
+
+const stopAudio = () => {
+    if (audioRef.value && initAudio.value === true ) {
+        audioRef.value.pause()
+        audioRef.value.currentTime = 0
+    }
+}
+
+//for incoming notification
+
+const serviceWorker = () => {
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', (event) => {
+          //  console.log('Message from Service Worker:', event.data);
+
+            const action = event.data?.action;
+
+            if (action === 'answer') {
+                answerCall()
+            } else if (action === 'reject') {
+                hangupCall();
+            }
+        });
+    }
+}
+
+const showIncomingNotification = () => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+        navigator.serviceWorker.ready.then((registration) => {
+            // Add a small delay to ensure session is ready
+            setTimeout(() => {
+                registration.showNotification('📞 Incoming Call', {
+                    body: `Caller: ${incomingNumber.value}`,
+                    icon: 'https://img.icons8.com/ios-filled/512/phone.png',
+                    vibrate: [200, 100, 200],
+                    requireInteraction: true,
+                    actions: [
+                        { action: 'answer', title: 'Answer' },
+                        { action: 'reject', title: 'Hangup'}
+                    ],
+                    tag: 'sip-incoming-call'
+                });
+            }, 500); // 500ms delay
+        });
+    } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then(permission => {
+            if (permission === 'granted') {
+                showIncomingNotification();
+            }
+        });
+    }
+};
 
 </script>
 
 <template>
 <div>
+
+    <div>
+        <audio ref="audioRef" :src="audioSource" preload="auto"></audio>
+    </div>
+
     <div class="dialer-container" style="margin-top: 0 !important;">
         <div class="dial-display" style="display: flex; width: 100%; gap: 10px">
             <div style="width: 100%">
@@ -621,6 +780,7 @@ const toggleDND = () => {
 
         <p class="footer mt-3 text-center">
             <small>Status: {{ callStatus }}</small>
+            <small class="text-danger d-block mt-2"> {{ sipStore.isDND ? 'DND enabled: Incoming calls will be rejected' : '' }}</small>
         </p>
 
         <audio ref="remoteAudio" autoplay hidden></audio>
@@ -650,7 +810,7 @@ const toggleDND = () => {
 }
 
 .dial-display {
-    font-size: 28px;
+    font-size: 24px;
     text-align: center;
     margin: 10px 0;
     color: #b0ff1a;
@@ -670,8 +830,8 @@ const toggleDND = () => {
     background: none;
     border: none;
     color: white;
-    font-size: 22px;
-    padding: 10px;
+    font-size: 17px;
+    padding: 8px;
     border-radius: 10px;
     transition: background 0.2s;
     background: #15273f;
@@ -685,9 +845,9 @@ const toggleDND = () => {
     background: #c0ff1a;
     border: none;
     border-radius: 50%;
-    width: 60px;
-    height: 60px;
-    font-size: 24px;
+    width: 50px;
+    height: 50px;
+    font-size: 21px;
     color: black;
     cursor: pointer;
 }

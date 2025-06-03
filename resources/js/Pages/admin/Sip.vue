@@ -534,14 +534,6 @@ const clearCallHistory = () => {
     <div class="container-xxl flex-grow-1 container-p-y">
 
         <div class="row">
-            <div class="col-md-12 mb-4">
-                <button @click="toggleDND" class="btn btn-sm float-end" :class="isDND ? 'btn-warning':'btn-primary'">
-                    {{ isDND ? 'Disable DND' : 'Enable DND' }}
-                </button>
-            </div>
-        </div>
-
-        <div class="row">
             <div class="col-md-12">
                 <div class="card">
                     <div class="d-flex justify-content-between align-items-center" >

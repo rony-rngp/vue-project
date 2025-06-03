@@ -4,7 +4,7 @@ import {Head} from "@inertiajs/vue3";
 import AdminHeader from "./partial/AdminHeader.vue";
 import AdminSidebar from "./partial/AdminSidebar.vue";
 
-import {onMounted, watch} from 'vue'
+import {onMounted, ref, watch} from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import { useToast } from 'vue-toast-notification'
 import Sip from "../../admin/Sip.vue";
@@ -36,6 +36,11 @@ const initMenu = () => {
 
 onMounted(() => {
     initMenu();
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js')
+            .then(() => console.log('✅ SW registered'))
+            .catch(err => console.error('SW failed:', err));
+    }
 });
 
 watch(
@@ -55,6 +60,16 @@ watch(
     },
     { immediate: true }
 )
+
+
+const hasIncomingCall = ref(false);
+
+const handleIncomingCall = (isIncoming) => {
+    hasIncomingCall.value = isIncoming;
+    if (isIncoming) {
+        $('#check').prop('checked', true)
+    }
+};
 
 </script>
 
@@ -97,9 +112,14 @@ watch(
     </div>
     <!-- / Layout wrapper -->
 
-    <input type="checkbox" id="check" /> <label class="chat-btn" for="check"> <i class="bx bx-comment comment"></i> <i class="bx bx-exit  close"></i> </label>
-    <div class="wrapper" >
-        <GlobalSipDailer />
+    <input type="checkbox" id="check" />
+    <label class="chat-btn" for="check">
+        <i class="bx bx-comment comment"></i>
+        <i class="bx bx-exit  close"></i>
+    </label>
+
+    <div class="wrapper">
+        <GlobalSipDailer @incoming-call="handleIncomingCall" />
     </div>
 
 
@@ -157,12 +177,12 @@ watch(
     width: 300px;
     background-color: #fff;
     border-radius: 5px;
-    opacity: 0;
+    display: none;
     transition: all 0.4s
 }
 
 #check:checked~.wrapper {
-    opacity: 1
+    display: block;
 }
 
 .header {

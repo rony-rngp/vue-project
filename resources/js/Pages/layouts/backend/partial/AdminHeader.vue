@@ -1,5 +1,12 @@
 <script setup>
 
+import {useSipStore} from "../../../../Stores/sipStore.js";
+import {onMounted} from "vue";
+
+const sipStore = useSipStore();
+
+
+
 </script>
 
 <template>
@@ -23,6 +30,11 @@
 
             <ul class="navbar-nav flex-row align-items-center ms-auto">
                 <!-- Place this tag where you want the button to render. -->
+                <li class="nav-item lh-1 me-4">
+                    <button @click="sipStore.toggleDND()" class="btn btn-sm float-end" :class="sipStore.isDND ? 'btn-warning':'btn-primary'">
+                        {{ sipStore.isDND ? 'Disable DND' : 'Enable DND' }}
+                    </button>
+                </li>
                 <li class="nav-item lh-1 me-4">
                     <a class="github-button" href="" data-icon="octicon-star" data-size="large" data-show-count="true" >Admin</a>
                 </li>

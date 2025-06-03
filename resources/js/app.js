@@ -7,6 +7,7 @@ import AdminLayout from "./Pages/layouts/backend/AdminLayout.vue";
 import VueToast from 'vue-toast-notification';
 import 'vue-toast-notification/dist/theme-bootstrap.css';
 import  {ZiggyVue} from '../../vendor/tightenco/ziggy';
+import {createPinia} from "pinia";
 
 
 
@@ -34,6 +35,7 @@ createInertiaApp({
             .use(plugin)
             .use(VueToast)
             .use(ZiggyVue)
+            .use(createPinia())
             // Register Inertia link globally
             .component('Link', Link)
             .mount(el)
