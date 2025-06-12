@@ -7,12 +7,14 @@ import {formatDuration, formatTime} from "../../helper.js";
 
 const sipStore = useSipStore();
 
+
 const page = usePage();
 const sipUser = page.props.sipUser
 const sipPassword = page.props.sipPassword
 const sipServer = page.props.sipServer
 const sipDomain = page.props.sipDomain
 
+const currentUserId = computed(() => page.props.auth?.user?.id ?? null)
 
 
 // State variables
@@ -67,6 +69,7 @@ const showHoldButton = computed(() =>
 )
 
 const appendNumber = (num) => {
+    console.log(currentUserId.value)
     if (showTransferInput.value || showConferenceInput.value) {
         transferNumber.value += num
     } else {
@@ -135,7 +138,8 @@ const makeCall = async () => {
         number: targetNumber.value,
         status: 'calling', // Initial state
         time: callStartTime.value.toISOString(),
-        duration: 0 // Will remain 0 unless answered
+        duration: 0, // Will remain 0 unless answered
+        userId: currentUserId.value
     };
     sipStore.addCallRecord(callRecord);
     //for call history
