@@ -115,7 +115,13 @@ const handleIncomingCall = (isIncoming) => {
     <input type="checkbox" id="check" />
     <label class="chat-btn" for="check">
         <i class="bx bx-comment comment"></i>
-        <i class="bx bx-exit  close"></i>
+        <i class="<!--bx bx-exit-->  close">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+        </i>
+
     </label>
 
     <div class="wrapper">
@@ -128,10 +134,11 @@ const handleIncomingCall = (isIncoming) => {
 
 <style scoped>
 .chat-btn {
-    position: absolute;
+    position: fixed;
     right: 14px;
     bottom: 30px;
-    cursor: pointer
+    cursor: pointer;
+
 }
 
 .chat-btn .close {
@@ -171,9 +178,9 @@ const handleIncomingCall = (isIncoming) => {
 }
 
 .wrapper {
-    position: absolute;
+    position: fixed;
     right: 20px;
-    bottom: 100px;
+    bottom: 90px;
     width: 300px;
     background-color: #fff;
     border-radius: 5px;

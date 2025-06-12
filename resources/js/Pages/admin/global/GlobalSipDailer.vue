@@ -3,6 +3,7 @@ import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import {Inviter, Registerer, SessionState, UserAgent,} from 'sip.js'
 import {usePage} from "@inertiajs/vue3";
 import {useSipStore} from "../../../Stores/sipStore.js";
+import {formatDuration, formatTime} from "../../helper.js";
 
 const sipStore = useSipStore();
 
@@ -20,6 +21,11 @@ const transferNumber = ref('')
 const remoteAudio = ref(null)
 const callStatus = ref('Ready')
 const dtmfSequence = ref('')
+
+const showKey = ref(false);
+const toggleshowKey = () => {
+    showKey.value = !showKey.value;
+};
 
 // Boolean state flags
 const showTransferInput = ref(false)
@@ -60,25 +66,6 @@ const showHoldButton = computed(() =>
     isActiveCall.value && !showTransferInput.value && !showConferenceInput.value
 )
 
-
-let callLogEntry = null
-const callHistory = ref([])
-const saveCallHistory = () => {
-    localStorage.setItem('callHistory', JSON.stringify(callHistory.value))
-}
-
-const loadCallHistory = () => {
-    const fullHistory = JSON.parse(localStorage.getItem('callHistory') || '[]')
-    callHistory.value = fullHistory.slice(0, 50)
-}
-
-const clearCallHistory = () => {
-    if (confirm('Are you sure?')){
-        localStorage.removeItem('callHistory')
-        callHistory.value = []
-    }
-}
-
 const appendNumber = (num) => {
     if (showTransferInput.value || showConferenceInput.value) {
         transferNumber.value += num
@@ -86,6 +73,10 @@ const appendNumber = (num) => {
         targetNumber.value += num
         if (isActiveCall.value) sendDTMF(num)
     }
+}
+
+const setTargetNum = (num) =>{
+    targetNumber.value = num;
 }
 
 const deleteLastDigit = () => {
@@ -111,6 +102,9 @@ const sendDTMF = (tone) => {
     }
 }
 
+const callStartTime = ref(null);
+const currentCallId = ref(null);
+
 const makeCall = async () => {
     if (!targetNumber.value || !userAgent) return
 
@@ -131,15 +125,19 @@ const makeCall = async () => {
     callStatus.value = 'Calling...'
     dtmfSequence.value = ''
 
-    //for call history
-    callLogEntry = {
+    // Create call record
+    currentCallId.value = Date.now();
+    callStartTime.value = new Date();
+
+    const callRecord = {
+        id: currentCallId.value,
         type: 'outgoing',
         number: targetNumber.value,
-        status: 'pending',
-        time: new Date().toISOString()
-    }
-    callHistory.value.unshift(callLogEntry)
-    saveCallHistory()
+        status: 'calling', // Initial state
+        time: callStartTime.value.toISOString(),
+        duration: 0 // Will remain 0 unless answered
+    };
+    sipStore.addCallRecord(callRecord);
     //for call history
 
     // Setup state listeners before sending invite
@@ -151,19 +149,35 @@ const makeCall = async () => {
             callStatus.value = 'In call'
             playRemoteAudio(inviter)
 
-            //for call history
-            callLogEntry.status = 'answered'
-            saveCallHistory()
+            // Update call record
+            sipStore.updateCallRecord(currentCallId.value, {
+                status: 'answered',
+            });
+
+            // Start duration timer
+            sipStore.activeCall = {
+                id: currentCallId.value,
+                startTime: new Date() // Reset start time when answered
+            };
 
         } else if (state === SessionState.Terminated) {
+
+            const wasAnswered = isActiveCall.value;
+            const endTime = new Date();
+            let duration = 0;
+
+            // Only calculate duration if call was answered
+            if (wasAnswered && callStartTime.value) {
+                duration = Math.floor((endTime - sipStore.activeCall.startTime) / 1000);
+            }
+
+            sipStore.updateCallRecord(currentCallId.value, {
+                status: wasAnswered ? 'answered' : 'rejected',
+                duration: wasAnswered ? duration : 0
+            });
+
             callStatus.value = 'Call ended'
             resetCallState()
-            //for call history
-            if (callLogEntry.status === 'pending') {
-                callLogEntry.status = 'missed'
-                saveCallHistory()
-                loadCallHistory()
-            }
         }
     })
 
@@ -209,6 +223,25 @@ const answerCall = async () => {
     try {
         await waitForSessionReady();
 
+        currentCallId.value = Date.now();
+        callStartTime.value = new Date();
+
+        const callRecord = {
+            id: currentCallId.value,
+            type: 'incoming',
+            number: incomingNumber.value,
+            status: 'answered',
+            time: callStartTime.value.toISOString(),
+            duration: 0
+        };
+        sipStore.addCallRecord(callRecord);
+
+        sipStore.activeCall = {
+            id: currentCallId.value,
+            startTime: callStartTime.value
+        };
+
+
         await currentSession.accept({
             sessionDescriptionHandlerOptions: {
                 constraints: { audio: true, video: false }
@@ -230,19 +263,52 @@ const cancelCall = async () => {
     try {
         if (!currentSession) return;
 
+        const endTime = new Date();
+        let duration = 0;
+
+        if (callStartTime.value) {
+            duration = Math.floor((endTime - callStartTime.value) / 1000);
+        }
+
         const state = currentSession.state;
 
         if (state === SessionState.Initial || state === SessionState.Establishing) {
             // Cancel the outgoing INVITE (before call is established)
             await currentSession.cancel();
+
+            // Update call record as canceled
+            if (currentCallId.value) {
+                sipStore.updateCallRecord(currentCallId.value, {
+                    status: 'canceled',
+                    duration: 0
+                });
+            }
+
         } else if (state === SessionState.Established) {
             // Call fully established, end the call with BYE
             await currentSession.bye();
+
+            // Update call record as completed
+            if (currentCallId.value) {
+                sipStore.updateCallRecord(currentCallId.value, {
+                    status: 'completed',
+                    duration: duration
+                });
+            }
+
         } else {
             console.warn('Session is in unexpected state:', state);
         }
     } catch (error) {
         console.error('Cancel/hangup call failed:', error);
+
+        if (currentCallId.value) {
+            sipStore.updateCallRecord(currentCallId.value, {
+                status: 'failed',
+                duration: 0
+            });
+        }
+
     } finally {
         resetCallState();
         callStatus.value = 'Call ended';
@@ -251,14 +317,30 @@ const cancelCall = async () => {
 
 const hangupCall = async () => {
     try {
+
+        const endTime = new Date();
+        let duration = 0;
+
+        if (isActiveCall.value && sipStore.activeCall) {
+            duration = Math.floor((endTime - sipStore.activeCall.startTime) / 1000);
+        }
+
+
         // Hang up currentSession
         if (currentSession) {
             if (currentSession.state === SessionState.Established) {
                 await currentSession.bye();
+
+                sipStore.updateCallRecord(currentCallId.value, {
+                    status: isActiveCall.value ? 'answered' : 'missed',
+                    duration: isActiveCall.value ? duration : 0
+                });
+
             } else if (currentSession.state === SessionState.Initial || currentSession.state === SessionState.Establishing) {
                 await currentSession.cancel?.();
                 await currentSession.reject?.();
             }
+
             cleanupSession(currentSession);
             currentSession = null;
         }
@@ -284,6 +366,10 @@ const hangupCall = async () => {
 
         callStatus.value = 'Call ended';
         resetCallState();
+
+        sipStore.activeCall = null;
+
+        //sipStore.loadCallHistory();
     }
 };
 
@@ -431,7 +517,7 @@ const playRemoteAudio = (session) => {
     }
 };
 
-const resetCallState = () => {
+const resetCallState = (noClearNumber) => {
    /* isCalling.value = false
     isIncomingCall.value = false
     isActiveCall.value = false
@@ -453,7 +539,9 @@ const resetCallState = () => {
     showTransferInput.value = false;
     showConferenceInput.value = false;
     dtmfSequence.value = '';
-    targetNumber.value = '';
+
+   // targetNumber.value = '';
+
     transferNumber.value = '';
 
     if (currentSession?.sessionDescriptionHandler?.peerConnection) {
@@ -464,12 +552,15 @@ const resetCallState = () => {
         remoteAudio.value.srcObject = null;
     }
 
+
     currentSession = null;
+    currentCallId.value = null;
+    callStartTime.value = null;
 }
 
 
 onMounted(async () => {
-    loadCallHistory();
+    sipStore.loadCallHistory();
     sipStore.loadDND();
 
     document.addEventListener('click', initializeAudio, { once: true });
@@ -500,9 +591,29 @@ onMounted(async () => {
 
                     if (sipStore.isDND) {
                         await invitation.reject();
+
+                        sipStore.addCallRecord({
+                            type: 'incoming',
+                            number: fromNumber,
+                            status: 'rejected',
+                            time: new Date().toISOString(),
+                            duration: 0
+                        });
+
                         callStatus.value = `Call from ${invitation.remoteIdentity.uri.user} rejected due to DND`;
                         return;
                     }
+
+                    currentCallId.value = Date.now();
+                    const callRecord = {
+                        id: currentCallId.value,
+                        type: 'incoming',
+                        number: fromNumber,
+                        status: 'ringing',
+                        time: new Date().toISOString(),
+                        duration: 0
+                    };
+                    sipStore.addCallRecord(callRecord);
 
                     // Store the invitation and update UI
                     currentSession = invitation;
@@ -510,15 +621,6 @@ onMounted(async () => {
                     incomingNumber.value = invitation.remoteIdentity.uri.user;
                     callStatus.value = `Incoming call from ${invitation.remoteIdentity.uri.user}`;
 
-                    // Add call history
-                    let incomingCallEntry = {
-                        type: 'incoming',
-                        number: fromNumber,
-                        status: 'pending',
-                        time: new Date().toISOString()
-                    };
-                    callHistory.value.unshift(incomingCallEntry);
-                    saveCallHistory();
 
                     // Add state change listener
                     invitation.stateChange.addListener((state) => {
@@ -529,14 +631,31 @@ onMounted(async () => {
                             isActiveCall.value = true;
                             callStatus.value = 'In call';
                             playRemoteAudio(invitation);
-                            incomingCallEntry.status = 'answered';
-                            saveCallHistory();
+
+                            sipStore.activeCall = {
+                                id: currentCallId.value,
+                                startTime: new Date()
+                            };
+
+                            sipStore.updateCallRecord(currentCallId.value, {
+                                status: 'answered'
+                            });
+
                         }
                         else if (state === SessionState.Terminated) {
-                            if (incomingCallEntry.status === 'pending') {
-                                incomingCallEntry.status = 'missed';
-                                saveCallHistory();
+
+                            const wasAnswered = isActiveCall.value;
+                            let duration = 0;
+
+                            if (wasAnswered && sipStore.activeCall) {
+                                duration = Math.floor((new Date() - sipStore.activeCall.startTime) / 1000);
                             }
+
+                            sipStore.updateCallRecord(currentCallId.value, {
+                                status: wasAnswered ? 'answered' : 'missed',
+                                duration: wasAnswered ? duration : 0
+                            });
+
                             callStatus.value = 'Call ended';
                             resetCallState();
                         }
@@ -546,10 +665,13 @@ onMounted(async () => {
                     invitation.delegate = {
                         onCancel: () => {
                             console.log('Caller canceled the call');
+
+                            sipStore.updateCallRecord(currentCallId.value, {
+                                status: 'missed'
+                            });
+
                             callStatus.value = 'Caller canceled the call';
                             isIncomingCall.value = false;
-                            incomingCallEntry.status = 'missed';
-                            saveCallHistory();
                             resetCallState();
                         },
 
@@ -725,6 +847,20 @@ const showIncomingNotification = () => {
     }
 };
 
+const handleKeydown = (e) => {
+    const key = e.key
+    if (/^[0-9*#]$/.test(key)) {
+        appendNumber(key, true)
+    } else if (key === 'Backspace') {
+        if (showTransferInput.value || showConferenceInput.value) {
+            transferNumber.value = transferNumber.value.slice(0, -1)
+        } else {
+            targetNumber.value = targetNumber.value.slice(0, -1)
+        }
+    }
+}
+
+
 </script>
 
 <template>
@@ -735,16 +871,27 @@ const showIncomingNotification = () => {
     </div>
 
     <div class="dialer-container" style="margin-top: 0 !important;">
-        <div class="dial-display" style="display: flex; width: 100%; gap: 10px">
-            <div style="width: 100%">
-                {{
+        <div class="dial-display " style="display: flex; width: 100%; gap: 10px">
+            <div class="">
+                <button style="background: #0E1B2B; color: white; border: 0" @click="deleteLastDigit">x</button>
+            </div>
+            <input type="text" v-model="targetNumber" @keydown.prevent="handleKeydown"
+                   class="dail_inp" :placeholder="
                     showTransferInput || showConferenceInput ?
                         (transferNumber !== '' ? transferNumber : 'Enter Number') :
                         (targetNumber !== '' ? targetNumber : 'Enter Number')
-                }}
-            </div>
+                ">
             <div class="">
-                <button style="background: #0E1B2B; color: white; border: 0" @click="deleteLastDigit">x</button>
+                <button style="background: none; color: white; border: 0" @click="toggleshowKey">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="4" width="20" height="16" rx="2" ry="2" />
+                        <line x1="6" y1="8" x2="8" y2="8" />
+                        <line x1="10" y1="8" x2="12" y2="8" />
+                        <line x1="16" y1="8" x2="18" y2="8" />
+                        <line x1="6" y1="12" x2="18" y2="12" />
+                        <line x1="6" y1="16" x2="18" y2="16" />
+                    </svg>
+                </button>
             </div>
         </div>
 
@@ -774,7 +921,7 @@ const showIncomingNotification = () => {
             </div>
         </div>
 
-        <div class="dialpad">
+        <div class="dialpad" v-if="showKey">
             <button @click="appendNumber('1')">1</button>
             <button @click="appendNumber('2')">2<br><small>ABC</small></button>
             <button @click="appendNumber('3')">3<br><small>DEF</small></button>
@@ -787,6 +934,32 @@ const showIncomingNotification = () => {
             <button @click="appendNumber('*')">*</button>
             <button @click="appendNumber('0')">0</button>
             <button @click="appendNumber('#')">#</button>
+        </div>
+
+        <div v-else>
+
+            <div class="mt-4 mb-4">
+
+                <div class="list-group custom-scroll" style="height: 245px; overflow-y: auto;">
+
+                    <a @click="setTargetNum(call.number)" v-for="call in sipStore.callHistoryList" href="javascript:void(0)" :class="call.status === 'missed' ? 'text-danger' : 'text-white'" class="call-entry mb-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong :class="{'text-danger' : call.status === 'missed'}"> {{ call.number }}</strong>
+                                <div class="call-time">{{ formatTime(call.time) }}</div>
+                            </div>
+                            <div>
+                                <span class="d-block">{{ formatDuration(call.duration) }}</span>
+                            </div>
+                        </div>
+                    </a>
+
+                    <div v-if="sipStore.callHistoryList?.length === 0" class="d-flex flex-column align-items-center justify-content-center" style="height: 100vh;">
+                        <span class="text-danger">No Call History Found</span>
+                    </div>
+
+                </div>
+            </div>
         </div>
 
         <div class="action-buttons">
@@ -845,9 +1018,9 @@ const showIncomingNotification = () => {
             </button>
         </div>
 
-        <p class="footer mt-3 text-center">
+        <p class="footer mt-3 text-center mb-0">
             <small>Status: {{ callStatus }}</small>
-            <small class="text-danger d-block mt-2"> {{ sipStore.isDND ? 'DND enabled: Incoming calls will be rejected' : '' }}</small>
+            <small v-if="sipStore.isDND" class="text-danger d-block mt-2"> {{ sipStore.isDND ? 'DND enabled: Incoming calls will be rejected' : '' }}</small>
         </p>
 
         <audio ref="remoteAudio" autoplay hidden></audio>
@@ -856,6 +1029,40 @@ const showIncomingNotification = () => {
 </template>
 
 <style scoped>
+
+.custom-scroll::-webkit-scrollbar {
+    width: 2px !important;
+}
+
+.custom-scroll::-webkit-scrollbar-track {
+    background: white;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb {
+    background-color: white; /* scrollbar color */
+    border-radius: 2px;
+}
+
+/* Firefox */
+.custom-scroll {
+    scrollbar-width: thin; /* auto | thin | none */
+    scrollbar-color: rgba(196, 183, 183, 0.71) transparent;
+}
+
+/* Hide arrows/spinners in Firefox */
+.dail_inp {
+    -moz-appearance: textfield;
+    width: 100%;
+    appearance: none;
+    -webkit-appearance: none;
+    background: none;
+    border: none;
+    outline: none;
+    box-shadow: none;
+    padding: 0;
+    margin: 0; color: #A0EA1C !important;
+}
+
 /* Add this new style for the answer button */
 .btn-accept {
     background: #5a9e5f;
@@ -877,7 +1084,7 @@ const showIncomingNotification = () => {
 }
 
 .dial-display {
-    font-size: 24px;
+    font-size: 18px;
     text-align: center;
     margin: 10px 0;
     color: #b0ff1a;
@@ -897,8 +1104,8 @@ const showIncomingNotification = () => {
     background: none;
     border: none;
     color: white;
-    font-size: 17px;
-    padding: 8px;
+    font-size: 15px;
+    padding: 6px;
     border-radius: 10px;
     transition: background 0.2s;
     background: #15273f;
@@ -912,8 +1119,8 @@ const showIncomingNotification = () => {
     background: #c0ff1a;
     border: none;
     border-radius: 50%;
-    width: 50px;
-    height: 50px;
+    width: 40px;
+    height: 40px;
     font-size: 21px;
     color: black;
     cursor: pointer;

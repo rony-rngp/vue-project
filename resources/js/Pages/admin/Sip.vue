@@ -8,6 +8,7 @@ import {
 } from 'sip.js'
 import Pagination from "../Pagination.vue";
 import {formatTime} from "../helper.js";
+import {useSipStore} from "../../Stores/sipStore.js";
 
 const props = defineProps({
     sipUser: String,
@@ -15,6 +16,8 @@ const props = defineProps({
     sipServer: String,
     sipDomain: String,
 })
+
+const sipStore = useSipStore();
 
 /*// State variables
 const targetNumber = ref('')
@@ -491,7 +494,7 @@ onBeforeUnmount(async () => {
     }
 })*/
 
-const isDND = ref(false);
+/*const isDND = ref(false);
 
 const toggleDND = () => {
     isDND.value = !isDND.value;
@@ -524,9 +527,18 @@ const clearCallHistory = () => {
         localStorage.removeItem('callHistory')
         callHistory.value = []
     }
-}
+}*/
 
+const formatDate = (isoString) => {
+    const date = new Date(isoString);
+    return date.toLocaleString();
+};
 
+const formatDuration = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
 
 </script>
 
@@ -535,11 +547,28 @@ const clearCallHistory = () => {
 
         <div class="row">
             <div class="col-md-12">
+<!--                <div class="call-history">
+                    <div v-for="call in sipStore.callHistoryList" :key="call.id" class="call-item">
+                        <div class="call-icon">
+                            <span v-if="call.type === 'incoming'">📥</span>
+                            <span v-else>📤</span>
+                        </div>
+                        <div class="call-details">
+                            <div class="call-number">{{ call.number }}</div>
+                            <div class="call-info">
+                                <span class="call-type">{{ call.type }}</span> •
+                                <span class="call-status">{{ call.status }}</span> •
+                                <span class="call-time">{{ formatDate(call.time) }}</span>
+                                <span v-if="call.duration > 0"> • {{ formatDuration(call.duration) }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>-->
                 <div class="card">
                     <div class="d-flex justify-content-between align-items-center" >
                         <h5 class="card-header">Call History</h5>
                         <div class="me-5">
-                            <button @click="clearCallHistory" class="btn btn-primary btn-sm"> Clear History</button>
+                            <button @click="sipStore.clearCallHistory" class="btn btn-primary btn-sm"> Clear History</button>
                         </div>
                     </div>
                     <div class="table-responsive text-nowrap">
@@ -549,18 +578,24 @@ const clearCallHistory = () => {
                                 <th>Number</th>
                                 <th>Type</th>
                                 <th>Status</th>
+                                <th>Duration</th>
                                 <th>Time</th>
                             </tr>
                             </thead>
                             <tbody class="table-border-bottom-0">
-                            <tr v-for="call in callHistory">
+                            <tr v-for="call in sipStore.callHistoryList">
                                 <td>{{ call.number }}</td>
-                                <td>{{ call.type }}</td>
+                                <td>
+                                    <span v-if="call.type === 'incoming'">📥</span>
+                                    <span v-else>📤</span>
+                                    {{ call.type }}
+                                </td>
                                 <td>{{ call.status }}</td>
-                                <td>{{ formatTime(call.time) }}</td>
+                                <td>{{ formatDuration(call.duration) }}</td>
+                                <td>{{ formatDate(call.time) }}</td>
                             </tr>
 
-                            <tr v-if="callHistory.length === 0">
+                            <tr v-if="sipStore.callHistoryList.length === 0">
                                 <td colspan="4" class="text-center text-danger">No Call Found</td>
                             </tr>
 
