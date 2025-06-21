@@ -9,6 +9,7 @@ import { usePage } from '@inertiajs/vue3'
 import { useToast } from 'vue-toast-notification'
 import Sip from "../../admin/Sip.vue";
 import GlobalSipDailer from "../../admin/global/GlobalSipDailer.vue";
+import CallerModal from "../../admin/global/callerModal.vue";
 
 const page = usePage()
 const toast = useToast()
@@ -71,6 +72,61 @@ const handleIncomingCall = (isIncoming) => {
     }
 };
 
+
+
+
+const draggableWrapper = ref(null)
+let startX, startY, initialX, initialY
+
+const startDrag = (e) => {
+    if (!e.target.matches('input, select, textarea, button')) {
+        e.preventDefault();
+        startX = e.clientX;
+        startY = e.clientY;
+        initialX = draggableWrapper.value.offsetLeft;
+        initialY = draggableWrapper.value.offsetTop;
+
+        document.addEventListener('mousemove', drag);
+        document.addEventListener('mouseup', stopDrag);
+        draggableWrapper.value.style.cursor = 'grabbing';
+    }
+}
+
+const drag = (e) => {
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+
+    // Calculate new position
+    let newX = initialX + dx;
+    let newY = initialY + dy;
+
+
+    //herader
+    let header = document.querySelector('.layout-navbar');
+    const sidebar = document.querySelector('#layout-menu');
+
+    // Define your boundaries
+    const headerHeight = header.offsetHeight +16 ?? 0; // Adjust to your header height
+    const sidebarWidth = sidebar.offsetWidth ?? 0; // Adjust to your sidebar width
+    const wrapperWidth = draggableWrapper.value.offsetWidth;
+    const wrapperHeight = draggableWrapper.value.offsetHeight;
+
+    // Constrain within viewport boundaries
+    newX = Math.max(sidebarWidth, Math.min(newX, window.innerWidth - wrapperWidth));
+    newY = Math.max(headerHeight, Math.min(newY, window.innerHeight - wrapperHeight));
+
+    // Apply constrained position
+    draggableWrapper.value.style.left = `${newX}px`;
+    draggableWrapper.value.style.top = `${newY}px`;
+};
+
+const stopDrag = () => {
+    document.removeEventListener('mousemove', drag)
+    document.removeEventListener('mouseup', stopDrag)
+    draggableWrapper.value.style.cursor = 'grab'
+}
+
+
 </script>
 
 <template>
@@ -114,7 +170,7 @@ const handleIncomingCall = (isIncoming) => {
 
     <input type="checkbox" id="check" />
     <label class="chat-btn" for="check">
-        <i class="bx bx-comment comment"></i>
+        <i class="bx bx-phone-call comment"></i>
         <i class="<!--bx bx-exit-->  close">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -124,9 +180,12 @@ const handleIncomingCall = (isIncoming) => {
 
     </label>
 
-    <div class="wrapper">
-        <GlobalSipDailer @incoming-call="handleIncomingCall" />
+    <div class="wrapper" ref="draggableWrapper">
+
+        <GlobalSipDailer  @mousedown="startDrag" @incoming-call="handleIncomingCall" />
     </div>
+
+    <caller-modal></caller-modal>
 
 
 </div>
@@ -182,10 +241,10 @@ const handleIncomingCall = (isIncoming) => {
     right: 20px;
     bottom: 90px;
     width: 300px;
-    background-color: #fff;
+    //background-color: #fff;
     border-radius: 5px;
     display: none;
-    transition: all 0.4s
+    transition: left 0.1s, top 0.1s;
 }
 
 #check:checked~.wrapper {

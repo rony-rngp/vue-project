@@ -69,7 +69,7 @@ const showHoldButton = computed(() =>
 )
 
 const appendNumber = (num) => {
-    console.log(currentUserId.value)
+    console.log(num.value)
     if (showTransferInput.value || showConferenceInput.value) {
         transferNumber.value += num
     } else {
@@ -122,6 +122,16 @@ const makeCall = async () => {
         return
     }
 
+    let contactName = null;
+    try {
+        const response = await sipStore.findContact(targetNumber.value);
+        if (response) {
+            contactName = response.contact.name;
+        }
+    } catch (error) {
+        console.error('Contact lookup failed:', error);
+    }
+
     isCalling.value = true
     const inviter = new Inviter(userAgent, targetURI)
     currentSession = inviter
@@ -132,10 +142,12 @@ const makeCall = async () => {
     currentCallId.value = Date.now();
     callStartTime.value = new Date();
 
+
     const callRecord = {
         id: currentCallId.value,
         type: 'outgoing',
         number: targetNumber.value,
+        contactName: contactName,
         status: 'calling', // Initial state
         time: callStartTime.value.toISOString(),
         duration: 0, // Will remain 0 unless answered
@@ -227,18 +239,28 @@ const answerCall = async () => {
     try {
         await waitForSessionReady();
 
-        currentCallId.value = Date.now();
-        callStartTime.value = new Date();
+        // currentCallId.value = Date.now();
+        // callStartTime.value = new Date();
+        //
+        // const callRecord = {
+        //     id: currentCallId.value,
+        //     type: 'incoming',
+        //     number: incomingNumber.value,
+        //     status: 'answered',
+        //     time: callStartTime.value.toISOString(),
+        //     duration: 0
+        // };
+        // sipStore.addCallRecord(callRecord);
 
-        const callRecord = {
-            id: currentCallId.value,
-            type: 'incoming',
-            number: incomingNumber.value,
+        // DEBUG: Log current call ID before update
+        console.log('Answering call with ID:', currentCallId.value);
+
+        // Verify the record exists before updating
+        const existingRecord = sipStore.callHistoryList.find(call => call.id === currentCallId.value);
+        sipStore.updateCallRecord(currentCallId.value, {
             status: 'answered',
-            time: callStartTime.value.toISOString(),
-            duration: 0
-        };
-        sipStore.addCallRecord(callRecord);
+            startTime: new Date().toISOString()
+        });
 
         sipStore.activeCall = {
             id: currentCallId.value,
@@ -593,12 +615,16 @@ onMounted(async () => {
                 onInvite: async (invitation) => {
                     const fromNumber = invitation.remoteIdentity.uri.user;
 
+                    //show pop
+                    const callerInfo = await sipStore.showCallerInfo(fromNumber);
+
                     if (sipStore.isDND) {
                         await invitation.reject();
 
                         sipStore.addCallRecord({
                             type: 'incoming',
                             number: fromNumber,
+                            contactName: callerInfo?.name ? callerInfo.name : null,
                             status: 'rejected',
                             time: new Date().toISOString(),
                             duration: 0
@@ -613,6 +639,7 @@ onMounted(async () => {
                         id: currentCallId.value,
                         type: 'incoming',
                         number: fromNumber,
+                        contactName: callerInfo?.name ? callerInfo.name : null,
                         status: 'ringing',
                         time: new Date().toISOString(),
                         duration: 0
@@ -623,7 +650,10 @@ onMounted(async () => {
                     currentSession = invitation;
                     isIncomingCall.value = true;
                     incomingNumber.value = invitation.remoteIdentity.uri.user;
-                    callStatus.value = `Incoming call from ${invitation.remoteIdentity.uri.user}`;
+
+                    callStatus.value = callerInfo?.name
+                        ? `Incoming call from ${callerInfo.name} (${fromNumber})`
+                        : `Incoming call from ${fromNumber}`;
 
 
                     // Add state change listener
@@ -656,7 +686,7 @@ onMounted(async () => {
                             }
 
                             sipStore.updateCallRecord(currentCallId.value, {
-                                status: wasAnswered ? 'answered' : 'missed',
+                                status: wasAnswered ? 'answered' : 'declined', //for reject by user
                                 duration: wasAnswered ? duration : 0
                             });
 
@@ -709,8 +739,23 @@ onMounted(async () => {
         callStatus.value = 'SIP connection failed'
     }
 
+    window.addEventListener('beforeunload', handleBeforeUnload);
 
 })
+
+//update status and contact display name
+watch(() => sipStore.currentCaller, (newContact) => {
+    if (newContact && isIncomingCall.value) {
+        callStatus.value = `Incoming call from ${newContact.name} (${incomingNumber.value})`;
+
+        // Optional: Update call record with contact name
+        if (currentCallId.value) {
+            sipStore.updateCallRecord(currentCallId.value, {
+                contactName: newContact.name
+            });
+        }
+    }
+});
 
 onBeforeUnmount(async () => {
     try {
@@ -721,7 +766,20 @@ onBeforeUnmount(async () => {
     } catch (error) {
         console.error('Cleanup error:', error)
     }
+
+    window.removeEventListener('beforeunload', handleBeforeUnload);
+
 })
+
+const handleBeforeUnload = (event) => {
+
+    if (isCalling.value || isIncomingCall.value || isActiveCall.value) {
+
+       hangupCall();
+
+    }
+};
+
 
 const checkPermissions = async () => {
     try {
@@ -862,6 +920,16 @@ const handleKeydown = (e) => {
             targetNumber.value = targetNumber.value.slice(0, -1)
         }
     }
+
+    callEnter();
+
+
+}
+
+const callEnter = () => {
+    if (!isActiveCall.value && !isCalling.value && !isIncomingCall.value){
+        makeCall();
+    }
 }
 
 
@@ -879,7 +947,7 @@ const handleKeydown = (e) => {
             <div class="">
                 <button style="background: #0E1B2B; color: white; border: 0" @click="deleteLastDigit">x</button>
             </div>
-            <input type="text" v-model="targetNumber" @keydown.prevent="handleKeydown"
+            <input type="text" v-model="targetNumber" @keydown.enter.prevent="handleKeydown"
                    class="dail_inp" :placeholder="
                     showTransferInput || showConferenceInput ?
                         (transferNumber !== '' ? transferNumber : 'Enter Number') :
@@ -946,10 +1014,10 @@ const handleKeydown = (e) => {
 
                 <div class="list-group custom-scroll" style="height: 245px; overflow-y: auto;">
 
-                    <a @click="setTargetNum(call.number)" v-for="call in sipStore.callHistoryList" href="javascript:void(0)" :class="call.status === 'missed' ? 'text-danger' : 'text-white'" class="call-entry mb-2">
+                    <a @click.prevent="setTargetNum(call.number)" @dblclick="callEnter" v-for="call in sipStore.callHistoryList" href="javascript:void(0)" :class="call.status === 'missed' ? 'text-danger' : 'text-white'" class="call-entry mb-2">
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
-                                <strong :class="{'text-danger' : call.status === 'missed'}"> {{ call.number }}</strong>
+                                <strong :class="{'text-danger' : call.status === 'missed'}"> {{ call.number }} <span v-if="call.contactName"> - {{call.contactName}}</span></strong>
                                 <div class="call-time">{{ formatTime(call.time) }}</div>
                             </div>
                             <div>

@@ -584,7 +584,7 @@ const formatDuration = (seconds) => {
                             </thead>
                             <tbody class="table-border-bottom-0">
                             <tr v-for="call in sipStore.callHistoryList">
-                                <td>{{ call.number }}</td>
+                                <td>{{ call.number }} <span v-if="call.contactName">( {{call.contactName}} )</span></td>
                                 <td>
                                     <span v-if="call.type === 'incoming'">📥</span>
                                     <span v-else>📤</span>
