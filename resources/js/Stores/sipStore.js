@@ -1,9 +1,13 @@
 import { defineStore } from 'pinia'
 import {computed, ref} from 'vue'
 import { usePage } from '@inertiajs/vue3'
+import ApiErrorHandler from "../utilis/apiErrorHandaler.blade.js";
+import {useTicketStore} from "./ticketStore.js";
 
 export const useSipStore = defineStore('sip', () => {
     const page = usePage()
+
+    const ticketStore = useTicketStore();
 
     const currentUserId = computed(() => page.props.auth?.user?.id ?? null)
 
@@ -83,9 +87,10 @@ export const useSipStore = defineStore('sip', () => {
 
     //for contacts
     // Modal state
-    const showCallerModal = ref(false)
     const currentCaller = ref(null)
-    const showContactForm = ref(false)
+    const fromCall = ref(false)
+    const findContactLoading = ref(false)
+
     const newContact = ref({
         name: '',
         caller_id: '',
@@ -107,9 +112,12 @@ export const useSipStore = defineStore('sip', () => {
 
     // Show caller modal with contact info or add form
     const showCallerInfo = async (callerId) => {
+
+        fromCall.value = true;
+        findContactLoading.value = true;
+
         // Clear previous state
         currentCaller.value = null;
-        showContactForm.value = false;
 
         // Search for contact
         const res = await findContact(callerId);
@@ -117,26 +125,16 @@ export const useSipStore = defineStore('sip', () => {
 
         if (contact != null) {
             // Existing contact found
-            currentCaller.value = {
-                name: contact.name,
-                caller_id: contact.caller_id,
-                email: contact.email,
-                description: contact.description
-            };
-            showContactForm.value = false;
-            showCallerModal.value = true;
+            currentCaller.value = contact;
+            findContactLoading.value = false;
+
+            await ticketStore.getCallerTicketList(contact.id);
+
             return contact;
 
         } else {
             currentCaller.value = null;
-            newContact.value = {
-                name: '',
-                caller_id: callerId,
-                email: '',
-                description: ''
-            };
-            showContactForm.value = true;
-            showCallerModal.value = true;
+            findContactLoading.value = false;
             return  null;
         }
 
@@ -144,24 +142,18 @@ export const useSipStore = defineStore('sip', () => {
     };
 
     // Save new contact
-    const saveContact = async () => {
+    const saveContact = async (data) => {
         try {
-            const response = await axios.post('/admin/contacts-store-api', newContact.value)
+            const response = await axios.post('/admin/contacts-store-api', data)
             currentCaller.value = response.data
-            showContactForm.value = false
-            return true
+            return { status: true, message: 'Contact added successfully' };
         } catch (error) {
-            console.error('Error saving contact:', error)
-            return false
+            let regErrorMsg = ApiErrorHandler.getMessage(error);
+            return { status: false, message: regErrorMsg };
         }
     }
 
-    // Close modal
-    const closeCallerModal = () => {
-        showCallerModal.value = false
-        showContactForm.value = false
-        currentCaller.value = null
-    }
+
 
 
     return {
@@ -177,13 +169,12 @@ export const useSipStore = defineStore('sip', () => {
         clearCallHistory,
 
 
-        showCallerModal,
         currentCaller,
-        showContactForm,
         newContact,
         showCallerInfo,
         saveContact,
-        closeCallerModal,
-        findContact
+        findContact,
+        fromCall,
+        findContactLoading
     }
 })

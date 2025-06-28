@@ -7,9 +7,7 @@ import AdminSidebar from "./partial/AdminSidebar.vue";
 import {onMounted, ref, watch} from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import { useToast } from 'vue-toast-notification'
-import Sip from "../../admin/Sip.vue";
 import GlobalSipDailer from "../../admin/global/GlobalSipDailer.vue";
-import CallerModal from "../../admin/global/callerModal.vue";
 
 const page = usePage()
 const toast = useToast()
@@ -185,7 +183,7 @@ const stopDrag = () => {
         <GlobalSipDailer  @mousedown="startDrag" @incoming-call="handleIncomingCall" />
     </div>
 
-    <caller-modal></caller-modal>
+<!--    <caller-modal></caller-modal>-->
 
 
 </div>

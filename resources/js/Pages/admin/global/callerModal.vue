@@ -6,7 +6,7 @@ import {useSipStore} from "../../../Stores/sipStore.js";
 const sipStore = useSipStore()
 let modal = null
 
-onMounted(() => {
+/*onMounted(() => {
     const modalEl = document.getElementById('callerModal')
     if (modalEl) {
         modal = new Modal(modalEl)
@@ -19,7 +19,7 @@ onMounted(() => {
             }
         })
     }
-})
+})*/
 
 const handleSave = async () => {
     const success = await sipStore.saveContact()

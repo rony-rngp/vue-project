@@ -8,6 +8,8 @@ import VueToast from 'vue-toast-notification';
 import 'vue-toast-notification/dist/theme-bootstrap.css';
 import  {ZiggyVue} from '../../vendor/tightenco/ziggy';
 import {createPinia} from "pinia";
+import 'bootstrap/dist/js/bootstrap.bundle.min.js';
+
 
 
 

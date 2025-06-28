@@ -9,10 +9,7 @@ const {getSettings} = useSettings();
 </script>
 
 <template>
-<!--    <Link href="/">Home</Link>-->
-<!--    <Link href="/about">About</Link>-->
-<!--    <Link href="/contact">Contact</Link>-->
-<!--    <Link href="/login">Login</Link>-->
+
 
     <div>
         <nav class="layout-navbar container-xxl navbar navbar-expand-xl navbar-detached align-items-center bg-navbar-theme" id="layout-navbar">

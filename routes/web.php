@@ -24,6 +24,9 @@ Route::group(['prefix' => 'user', 'as' => 'user.', 'middleware' => ['auth', 'use
     Route::get('dashboard', [\App\Http\Controllers\Frontend\UserController::class, 'dashboard'])->name('dashboard');
 });
 
+
+
+
 //admin
 Route::group(['prefix' => 'admin', 'as' => 'admin.'], function (){
 
@@ -53,6 +56,22 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function (){
             Route::get('contacts-info-api/{caller}', 'contact_info_api')->name('contacts.caller_api');
             Route::post('contacts-store-api', 'contact_store_api')->name('contacts.caller_store_api');
         });
+
+        Route::get('/current-caller-info', function (\Illuminate\Http\Request $request) {
+            if (!$request->has('callerId')) {
+                return redirect('/');
+            }
+            return inertia('admin/global/CallPage', [
+                'callerId' => $request->query('callerId')
+            ]);
+        });
+
+        //ticket routes
+        Route::get('tickets-by-caller/{id}', [\App\Http\Controllers\Backend\TicketController::class, 'getCallerTicketList']);
+        Route::get('tickets-details/{id}', [\App\Http\Controllers\Backend\TicketController::class, 'getTicketDetails']);
+        Route::post('tickets-store', [\App\Http\Controllers\Backend\TicketController::class, 'ticketStore']);
+        Route::post('tickets-status-update', [\App\Http\Controllers\Backend\TicketController::class, 'updateTicketStatus']);
+        Route::resource('tickets', \App\Http\Controllers\Backend\TicketController::class);
 
       //settings route
         Route::match(['get', 'post'], '/settings', [\App\Http\Controllers\Backend\SettingController::class, 'settings'])->name('settings');

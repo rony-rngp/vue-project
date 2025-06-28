@@ -118,7 +118,12 @@ const {getSettings} = useSettings();
                 </ul>
             </li>
 
-
+            <li class="menu-item" :class="$page.url.startsWith('/admin/tickets') ? 'active' : ''">
+                <Link :href="route('admin.tickets.index')" class="menu-link">
+                    <i class="menu-icon tf-icons bx bx-tag"></i>
+                    <div class="text-truncate">Tickets</div>
+                </Link>
+            </li>
 
             <li class="menu-item " :class="{'active' : $page.url.startsWith('/admin/settings')}">
                 <Link href="/admin/settings" class="menu-link" >
@@ -126,6 +131,16 @@ const {getSettings} = useSettings();
                     <div class="text-truncate">Settings</div>
                 </Link>
             </li>
+
+
+            <li class="menu-item ">
+                <Link  class="menu-link" href="/logout" method="post" style="border: 0; background: none; width: 100%">
+                    <i class="menu-icon tf-icons bx bx-power-off"></i>
+                    <div class="text-truncate">Log Out</div>
+                </Link>
+            </li>
+
+
 
 
         </ul>

@@ -40,7 +40,6 @@
 @inertia
 
 
-
 <script src="{{ asset('admin/assets') }}/vendor/libs/jquery/jquery.js"></script>
 <script src="{{ asset('admin/assets') }}/vendor/libs/popper/popper.js"></script>
 <script src="{{ asset('admin/assets') }}/vendor/js/bootstrap.js"></script>
@@ -48,31 +47,6 @@
 <script src="{{ asset('admin/assets') }}/vendor/js/menu.js"></script>
 <!-- Main JS -->
 <script src="{{ asset('admin/assets') }}/js/main.js"></script>
-
-{{--<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const menuEl = document.querySelector('#layout-menu');
-        if (menuEl) {
-            const menuInstance = new Menu(menuEl, {
-                accordion: true,
-                animate: true
-            });
-            window.MenuInstance = menuInstance;
-        }
-
-        let menuTogglers = document.querySelectorAll('.layout-menu-toggle');
-        menuTogglers.forEach(toggler => {
-            toggler.addEventListener('click', e => {
-                e.preventDefault();
-                if (window.Helpers && window.Helpers.toggleCollapsed) {
-                    window.Helpers.toggleCollapsed();
-                }
-            });
-        });
-    });
-
-
-</script>--}}
 
 </body>
 </html>

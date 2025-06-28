@@ -1,7 +1,7 @@
 <script setup>
 import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import {Inviter, Registerer, SessionState, UserAgent,} from 'sip.js'
-import {usePage} from "@inertiajs/vue3";
+import {router, usePage} from "@inertiajs/vue3";
 import {useSipStore} from "../../../Stores/sipStore.js";
 import {formatDuration, formatTime} from "../../helper.js";
 
@@ -23,6 +23,10 @@ const transferNumber = ref('')
 const remoteAudio = ref(null)
 const callStatus = ref('Ready')
 const dtmfSequence = ref('')
+
+
+const callerName = ref('')
+const callerNumber = ref('')
 
 const showKey = ref(false);
 const toggleshowKey = () => {
@@ -73,7 +77,11 @@ const appendNumber = (num) => {
     if (showTransferInput.value || showConferenceInput.value) {
         transferNumber.value += num
     } else {
-        targetNumber.value += num
+
+        //targetNumber.value += num
+        if (!isActiveCall.value) targetNumber.value += num
+
+
         if (isActiveCall.value) sendDTMF(num)
     }
 }
@@ -122,6 +130,8 @@ const makeCall = async () => {
         return
     }
 
+    showKey.value = false;
+
     let contactName = null;
     try {
         const response = await sipStore.findContact(targetNumber.value);
@@ -131,6 +141,9 @@ const makeCall = async () => {
     } catch (error) {
         console.error('Contact lookup failed:', error);
     }
+
+    callerName.value = contactName ?? '';
+    callerNumber.value = targetNumber.value;
 
     isCalling.value = true
     const inviter = new Inviter(userAgent, targetURI)
@@ -544,17 +557,6 @@ const playRemoteAudio = (session) => {
 };
 
 const resetCallState = (noClearNumber) => {
-   /* isCalling.value = false
-    isIncomingCall.value = false
-    isActiveCall.value = false
-    isOnHold.value = false
-    isInConference.value = false
-    showTransferInput.value = false
-    showConferenceInput.value = false
-    currentSession = null
-    conferenceSession = null
-    dtmfSequence.value = ''
-    conferenceStream = new MediaStream()*/
 
     isCalling.value = false;
     isIncomingCall.value = false;
@@ -577,7 +579,6 @@ const resetCallState = (noClearNumber) => {
     if (remoteAudio.value) {
         remoteAudio.value.srcObject = null;
     }
-
 
     currentSession = null;
     currentCallId.value = null;
@@ -615,8 +616,9 @@ onMounted(async () => {
                 onInvite: async (invitation) => {
                     const fromNumber = invitation.remoteIdentity.uri.user;
 
-                    //show pop
+
                     const callerInfo = await sipStore.showCallerInfo(fromNumber);
+
 
                     if (sipStore.isDND) {
                         await invitation.reject();
@@ -633,6 +635,8 @@ onMounted(async () => {
                         callStatus.value = `Call from ${invitation.remoteIdentity.uri.user} rejected due to DND`;
                         return;
                     }
+
+                    router.visit(`/admin/current-caller-info?callerId=${encodeURIComponent(fromNumber)}`);
 
                     currentCallId.value = Date.now();
                     const callRecord = {
@@ -655,6 +659,8 @@ onMounted(async () => {
                         ? `Incoming call from ${callerInfo.name} (${fromNumber})`
                         : `Incoming call from ${fromNumber}`;
 
+                    callerName.value = callerInfo?.name ? callerInfo?.name : ''
+                    callerNumber.value = fromNumber
 
                     // Add state change listener
                     invitation.stateChange.addListener((state) => {
@@ -909,7 +915,7 @@ const showIncomingNotification = () => {
     }
 };
 
-const handleKeydown = (e) => {
+/*const handleKeydown = (e) => {
     const key = e.key
     if (/^[0-9*#]$/.test(key)) {
         appendNumber(key, true)
@@ -924,7 +930,28 @@ const handleKeydown = (e) => {
     callEnter();
 
 
-}
+}*/
+
+const handleKeydown = (e) => {
+    const key = e.key;
+
+    if (/^[0-9*#]$/.test(key)) {
+        // Prevent default to stop typing in the input, if you want to control manually
+        e.preventDefault();
+        appendNumber(key);
+    } else if (key === 'Backspace') {
+        e.preventDefault();
+        if (showTransferInput.value || showConferenceInput.value) {
+            transferNumber.value = transferNumber.value.slice(0, -1);
+        } else {
+            targetNumber.value = targetNumber.value.slice(0, -1);
+        }
+    } else if (key === 'Enter') {
+        e.preventDefault();
+        callEnter();
+    }
+    // else let other keys behave normally
+};
 
 const callEnter = () => {
     if (!isActiveCall.value && !isCalling.value && !isIncomingCall.value){
@@ -942,160 +969,246 @@ const callEnter = () => {
         <audio ref="audioRef" :src="audioSource" preload="auto"></audio>
     </div>
 
-    <div class="dialer-container" style="margin-top: 0 !important;">
-        <div class="dial-display " style="display: flex; width: 100%; gap: 10px">
-            <div class="">
-                <button style="background: #0E1B2B; color: white; border: 0" @click="deleteLastDigit">x</button>
-            </div>
-            <input type="text" v-model="targetNumber" @keydown.enter.prevent="handleKeydown"
-                   class="dail_inp" :placeholder="
+    <div class="dialer-container" :style="isIncomingCall ? 'padding:0;' : ''" style="margin-top: 0 !important;">
+
+        <div v-if="!isIncomingCall">
+            <p class="footer text-center mb-2">
+                <small>Status: {{ callStatus }}</small>
+                <small v-if="sipStore.isDND" class="text-danger d-block mt-2"> {{ sipStore.isDND ? 'DND enabled: Incoming calls will be rejected' : '' }}</small>
+            </p>
+
+            <div class="dial-display " style="display: flex; width: 100%; gap: 10px">
+                <div class="">
+                    <button style="background: #0E1B2B; color: white; border: 0" @click="deleteLastDigit">x</button>
+                </div>
+                <input type="text" v-model="targetNumber" @keydown="handleKeydown"
+                       class="dail_inp" :placeholder="
                     showTransferInput || showConferenceInput ?
                         (transferNumber !== '' ? transferNumber : 'Enter Number') :
                         (targetNumber !== '' ? targetNumber : 'Enter Number')
                 ">
-            <div class="">
-                <button style="background: none; color: white; border: 0" @click="toggleshowKey">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="2" y="4" width="20" height="16" rx="2" ry="2" />
-                        <line x1="6" y1="8" x2="8" y2="8" />
-                        <line x1="10" y1="8" x2="12" y2="8" />
-                        <line x1="16" y1="8" x2="18" y2="8" />
-                        <line x1="6" y1="12" x2="18" y2="12" />
-                        <line x1="6" y1="16" x2="18" y2="16" />
+                <div class="">
+                    <button style="background: none; color: white; border: 0" @click="toggleshowKey">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="4" width="20" height="16" rx="2" ry="2" />
+                            <line x1="6" y1="8" x2="8" y2="8" />
+                            <line x1="10" y1="8" x2="12" y2="8" />
+                            <line x1="16" y1="8" x2="18" y2="8" />
+                            <line x1="6" y1="12" x2="18" y2="12" />
+                            <line x1="6" y1="16" x2="18" y2="16" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div v-if="showTransferInput && isActiveCall" class="transfer-ui">
+                <input
+                    v-model="transferNumber"
+                    placeholder="Enter number to transfer to"
+                    class="transfer-input"
+                    @keyup.enter="transferCall"
+                />
+                <div class="transfer-buttons">
+                    <button @click="transferCall" class="btn-transfer">Transfer</button>
+                    <button @click="showTransferInput = false" class="btn-cancel">Cancel</button>
+                </div>
+            </div>
+
+            <div v-if="showConferenceInput && isActiveCall" class="conference-ui">
+                <input
+                    v-model="transferNumber"
+                    placeholder="Enter number to conference"
+                    class="conference-input"
+                    @keyup.enter="startConference"
+                />
+                <div class="conference-buttons">
+                    <button @click="startConference" class="btn-conference">Add Conference</button>
+                    <button @click="showConferenceInput = false" class="btn-cancel">Cancel</button>
+                </div>
+            </div>
+
+            <div class="dialpad" v-if="showKey">
+                <button @click="appendNumber('1')">1</button>
+                <button @click="appendNumber('2')">2<br><small>ABC</small></button>
+                <button @click="appendNumber('3')">3<br><small>DEF</small></button>
+                <button @click="appendNumber('4')">4<br><small>GHI</small></button>
+                <button @click="appendNumber('5')">5<br><small>JKL</small></button>
+                <button @click="appendNumber('6')">6<br><small>MNO</small></button>
+                <button @click="appendNumber('7')">7<br><small>PQRS</small></button>
+                <button @click="appendNumber('8')">8<br><small>TUV</small></button>
+                <button @click="appendNumber('9')">9<br><small>WXYZ</small></button>
+                <button @click="appendNumber('*')">*</button>
+                <button @click="appendNumber('0')">0</button>
+                <button @click="appendNumber('#')">#</button>
+            </div>
+
+            <div v-else>
+
+                <div v-if="!isActiveCall && !isCalling" class="mt-4 mb-4">
+
+                    <div class="list-group custom-scroll" style="height: 245px; overflow-y: auto;">
+
+                        <a @click.prevent="setTargetNum(call.number)" @dblclick="callEnter" v-for="call in sipStore.callHistoryList" href="javascript:void(0)" :class="call.status === 'missed' ? 'text-danger' : 'text-white'" class="call-entry mb-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong :class="{'text-danger' : call.status === 'missed'}"> {{ call.number }} <span v-if="call.contactName"> - {{call.contactName}}</span></strong>
+                                    <div class="call-time">{{ formatTime(call.time) }}</div>
+                                </div>
+                                <div>
+                                    <span class="d-block">{{ formatDuration(call.duration) }}</span>
+                                </div>
+                            </div>
+                        </a>
+
+                        <div v-if="sipStore.callHistoryList?.length === 0" class="d-flex flex-column align-items-center justify-content-center" style="height: 100vh;">
+                            <span class="text-danger">No Call History Found</span>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div v-if="isActiveCall || isCalling">
+                    <div class="incoming-call-container" style="height: 360px">
+                        <div class="text-center">
+                            <div class="caller-image">
+                                <img src="https://randomuser.me/api/portraits/women/68.jpg" alt="Caller Image" />
+                            </div>
+                            <div v-if="callerName" class="caller-name">{{ callerName }}</div>
+                            <div v-if="callerNumber" :class="callerName ? '' : 'caller-name'">{{ callerNumber }}</div>
+                        </div>
+                        <div class="call-actions">
+
+                            <button v-if="isCalling" class="btn-hangup-call" @click="cancelCall">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/>
+                                    <line x1="23" y1="1" x2="1" y2="23"/>
+                                </svg>
+                            </button>
+
+
+
+                            <div v-if="isActiveCall" class="call-controls">
+                                <button
+                                    v-if="showTransferButton"
+                                    class="btn-transfer"
+                                    @click="showTransferInput = true; showConferenceInput = false"
+                                >
+                                    Transfer
+                                </button>
+
+                                <button
+                                    v-if="showConferenceButton"
+                                    class="btn-conference"
+                                    @click="showConferenceInput = true; showTransferInput = false"
+                                >
+                                    Conference
+                                </button>
+                                <button
+                                    v-if="showHoldButton"
+                                    class="btn-hold"
+                                    @click="toggleHold"
+                                    :class="{ 'btn-active': isOnHold }"
+                                >
+                                    {{ isOnHold ? 'Resume' : 'Hold' }}
+                                </button>
+
+                                <button class="btn-transfer" @click="toggleMute">{{ isMuted ? 'Unmute' : 'Mute' }}</button>
+
+                                <button class="btn-hangup" @click="hangupCall">Hang Up</button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="action-buttons">
+                <!-- Call button -->
+                <button
+                    v-if="showCallButton"
+                    class="call-button"
+                    @click="makeCall"
+                >
+                    📞
+                </button>
+
+                <!-- Incoming call buttons -->
+                <div v-if="isIncomingCall" class="call-controls">
+                    <button class="btn-accept" @click="answerCall">Answer</button>
+                    <button class="btn-hangup" @click="hangupCall">Decline</button>
+                </div>
+
+                <!-- Active call controls -->
+                <div v-if="isActiveCall && showKey" class="call-controls">
+                    <button
+                        v-if="showTransferButton"
+                        class="btn-transfer"
+                        @click="showTransferInput = true; showConferenceInput = false"
+                    >
+                        Transfer
+                    </button>
+                    <button
+                        v-if="showConferenceButton"
+                        class="btn-conference"
+                        @click="showConferenceInput = true; showTransferInput = false"
+                    >
+                        Conference
+                    </button>
+                    <button
+                        v-if="showHoldButton"
+                        class="btn-hold"
+                        @click="toggleHold"
+                        :class="{ 'btn-active': isOnHold }"
+                    >
+                        {{ isOnHold ? 'Resume' : 'Hold' }}
+                    </button>
+
+                    <button class="btn-transfer" @click="toggleMute">{{ isMuted ? 'Unmute' : 'Mute' }}</button>
+
+                    <button class="btn-hangup" @click="hangupCall">Hang Up</button>
+                </div>
+
+                <!-- Outgoing call hangup -->
+                <button
+                    v-if="isCalling && showKey"
+                    class="btn-hangup"
+                    @click="cancelCall"
+                >
+                    Cancel Call
+                </button>
+            </div>
+
+
+
+            <audio ref="remoteAudio" autoplay hidden></audio>
+        </div>
+
+        <div v-if="isIncomingCall" class="incoming-call-container">
+            <div class="text-center">
+                <div class="caller-image">
+                    <img src="https://randomuser.me/api/portraits/women/68.jpg" alt="Caller Image" />
+                </div>
+                <div v-if="callerName" class="caller-name">{{ callerName }}</div>
+                <div v-if="callerNumber" :class="callerName ? '' : 'caller-name'">{{ callerNumber }}</div>
+            </div>
+            <div class="call-actions">
+                <button class="btn-answer-call" @click="answerCall">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/>
+                        <polyline points="15 7 20 12 15 17"/>
+                    </svg>
+                </button>
+                <button class="btn-hangup-call" @click="hangupCall">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/>
+                        <line x1="23" y1="1" x2="1" y2="23"/>
                     </svg>
                 </button>
             </div>
         </div>
 
-        <div v-if="showTransferInput && isActiveCall" class="transfer-ui">
-            <input
-                v-model="transferNumber"
-                placeholder="Enter number to transfer to"
-                class="transfer-input"
-                @keyup.enter="transferCall"
-            />
-            <div class="transfer-buttons">
-                <button @click="transferCall" class="btn-transfer">Transfer</button>
-                <button @click="showTransferInput = false" class="btn-cancel">Cancel</button>
-            </div>
-        </div>
 
-        <div v-if="showConferenceInput && isActiveCall" class="conference-ui">
-            <input
-                v-model="transferNumber"
-                placeholder="Enter number to conference"
-                class="conference-input"
-                @keyup.enter="startConference"
-            />
-            <div class="conference-buttons">
-                <button @click="startConference" class="btn-conference">Add to Conference</button>
-                <button @click="showConferenceInput = false" class="btn-cancel">Cancel</button>
-            </div>
-        </div>
-
-        <div class="dialpad" v-if="showKey">
-            <button @click="appendNumber('1')">1</button>
-            <button @click="appendNumber('2')">2<br><small>ABC</small></button>
-            <button @click="appendNumber('3')">3<br><small>DEF</small></button>
-            <button @click="appendNumber('4')">4<br><small>GHI</small></button>
-            <button @click="appendNumber('5')">5<br><small>JKL</small></button>
-            <button @click="appendNumber('6')">6<br><small>MNO</small></button>
-            <button @click="appendNumber('7')">7<br><small>PQRS</small></button>
-            <button @click="appendNumber('8')">8<br><small>TUV</small></button>
-            <button @click="appendNumber('9')">9<br><small>WXYZ</small></button>
-            <button @click="appendNumber('*')">*</button>
-            <button @click="appendNumber('0')">0</button>
-            <button @click="appendNumber('#')">#</button>
-        </div>
-
-        <div v-else>
-
-            <div class="mt-4 mb-4">
-
-                <div class="list-group custom-scroll" style="height: 245px; overflow-y: auto;">
-
-                    <a @click.prevent="setTargetNum(call.number)" @dblclick="callEnter" v-for="call in sipStore.callHistoryList" href="javascript:void(0)" :class="call.status === 'missed' ? 'text-danger' : 'text-white'" class="call-entry mb-2">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <strong :class="{'text-danger' : call.status === 'missed'}"> {{ call.number }} <span v-if="call.contactName"> - {{call.contactName}}</span></strong>
-                                <div class="call-time">{{ formatTime(call.time) }}</div>
-                            </div>
-                            <div>
-                                <span class="d-block">{{ formatDuration(call.duration) }}</span>
-                            </div>
-                        </div>
-                    </a>
-
-                    <div v-if="sipStore.callHistoryList?.length === 0" class="d-flex flex-column align-items-center justify-content-center" style="height: 100vh;">
-                        <span class="text-danger">No Call History Found</span>
-                    </div>
-
-                </div>
-            </div>
-        </div>
-
-        <div class="action-buttons">
-            <!-- Call button -->
-            <button
-                v-if="showCallButton"
-                class="call-button"
-                @click="makeCall"
-            >
-                📞
-            </button>
-
-            <!-- Incoming call buttons -->
-            <div v-if="isIncomingCall" class="call-controls">
-                <button class="btn-accept" @click="answerCall">Answer</button>
-                <button class="btn-hangup" @click="hangupCall">Decline</button>
-            </div>
-
-            <!-- Active call controls -->
-            <div v-if="isActiveCall" class="call-controls">
-                <button
-                    v-if="showTransferButton"
-                    class="btn-transfer"
-                    @click="showTransferInput = true; showConferenceInput = false"
-                >
-                    Transfer
-                </button>
-                <button
-                    v-if="showConferenceButton"
-                    class="btn-conference"
-                    @click="showConferenceInput = true; showTransferInput = false"
-                >
-                    Conference
-                </button>
-                <button
-                    v-if="showHoldButton"
-                    class="btn-hold"
-                    @click="toggleHold"
-                    :class="{ 'btn-active': isOnHold }"
-                >
-                    {{ isOnHold ? 'Resume' : 'Hold' }}
-                </button>
-
-                <button class="btn-transfer" @click="toggleMute">{{ isMuted ? 'Unmute' : 'Mute' }}</button>
-
-                <button class="btn-hangup" @click="hangupCall">Hang Up</button>
-            </div>
-
-            <!-- Outgoing call hangup -->
-            <button
-                v-if="isCalling"
-                class="btn-hangup"
-                @click="cancelCall"
-            >
-                Cancel Call
-            </button>
-        </div>
-
-        <p class="footer mt-3 text-center mb-0">
-            <small>Status: {{ callStatus }}</small>
-            <small v-if="sipStore.isDND" class="text-danger d-block mt-2"> {{ sipStore.isDND ? 'DND enabled: Incoming calls will be rejected' : '' }}</small>
-        </p>
-
-        <audio ref="remoteAudio" autoplay hidden></audio>
     </div>
 </div>
 </template>
@@ -1151,7 +1264,7 @@ const callEnter = () => {
     color: white;
     width: auto;
     border-radius: 20px;
-    padding: 20px;
+    padding: 15px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
@@ -1287,4 +1400,75 @@ const callEnter = () => {
 .footer {
     color: #b0ff1a;
 }
+
+
+
+
+
+
+.incoming-call-container {
+    display: flex;
+    flex-direction: column;
+    background: #222;
+    color: white;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 20px;
+    box-sizing: border-box;
+    height: 386px;
+    border-radius:20px
+}
+
+.caller-image img {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #4caf50;
+}
+
+.caller-name {
+    margin-top: 20px;
+    margin-bottom: 10px;
+    font-size: 28px;
+    font-weight: 600;
+    text-align: center;
+}
+
+.call-actions {
+    display: flex;
+    width: 100%;
+    justify-content: space-around;
+    margin-bottom: 20px;
+}
+
+.btn-answer-call,
+.btn-hangup-call {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: none;
+    font-size: 30px;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 5px 10px rgba(0,0,0,0.3);
+    transition: transform 0.2s ease;
+}
+
+.btn-answer-call:active,
+.btn-hangup-call:active {
+    transform: scale(0.9);
+}
+
+.btn-answer-call {
+    background-color: #4caf50; /* green */
+}
+
+.btn-hangup-call {
+    background-color: #f44336; /* red */
+}
+
 </style>
