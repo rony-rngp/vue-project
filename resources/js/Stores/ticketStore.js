@@ -20,7 +20,7 @@ export const useTicketStore = defineStore('ticket', () => {
         showTicketLoading.value = true;
         callerTicketList.value = null;
         try {
-            const response = await axios.get(`/admin/tickets-by-caller/${contact_id}`)
+            const response = await axios.get(route('admin.getCallerTicketList', contact_id))
             callerTicketList.value = response.data
         } catch (error) {
             callerTicketList.value = [];
@@ -34,7 +34,7 @@ export const useTicketStore = defineStore('ticket', () => {
     const getTicketDetails = async (id) => {
         ticketDetails.value = null;
         try {
-            const response = await axios.get(`/admin/tickets-details/${id}`)
+            const response = await axios.get(route('admin.getTicketDetails', id))
             ticketDetails.value = response.data
         } catch (error) {
             ticketDetails.value = null;
@@ -46,7 +46,7 @@ export const useTicketStore = defineStore('ticket', () => {
     const saveTicket = async (data) => {
         isLoading.value = true;
         try {
-            const response = await axios.post('/admin/tickets-store', data)
+            const response = await axios.post(route('admin.ticketStore', data))
             await getCallerTicketList(data.contact_id);
             return { status: true, message: 'Ticket added successfully' };
         } catch (error) {
@@ -65,7 +65,7 @@ export const useTicketStore = defineStore('ticket', () => {
                 status: status,
             };
 
-            const response = await axios.post('/admin/tickets-status-update', data)
+            const response = await axios.post(route('admin.updateTicketStatus', data))
 
             // Update in ticketDetails if it's the current ticket
             ticketDetails.value.status = status;

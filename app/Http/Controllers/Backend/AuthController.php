@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
+use App\Services\OdooService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Http\Request;
@@ -21,7 +22,30 @@ class AuthController extends Controller
 
     public function dashboard()
     {
+        /*$odoo = new OdooService();
+        $result = $odoo->syncContact('+8809638823932', [
+            'name' => 'Tests',
+            'email' => 'test@gms.com',
+            'company_type' => 'person'
+        ]);
+        dd($result);
+
+        $odoo = new OdooService();
+        $contacts = $odoo->searchContactByNumber('+8809638823932');
+        dd($contacts);*/
+
+       /* $odoo = new OdooService();
+        $contacts = $odoo->searchContactByNumber('+8809638823932');
+        dd($contacts);*/
+
         return Inertia::render('admin/Dashboard');
+    }
+
+    public function search_caller(Request $request)
+    {
+        $odoo = new OdooService();
+        $contacts = $odoo->searchContactByNumber($request->caller);
+        dd($contacts);
     }
 
     public function sip()

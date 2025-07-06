@@ -31,8 +31,8 @@ defineProps({
 
                             <div>
                                 <li class="mb-2">Ticket No : {{ ticket.ticket_no }}</li>
-                                <li class="mb-2">Caller Name: {{ ticket.contact?.name }}</li>
-                                <li class="mb-2">Caller Number: {{ ticket.contact?.caller_id }}</li>
+                                <li class="mb-2">Caller Name: {{ ticket.contact?.name ?? '-' }}</li>
+                                <li class="mb-2">Caller Number: {{ ticket.contact?.caller_id ?? '-' }}</li>
                                 <li class="mb-2">Subject: {{ ticket.subject }}</li>
                                 <li class="mb-2">Status: {{ ticket.status }}</li>
                                 <li class="mb-2">Description: {{ ticket.description }}</li>

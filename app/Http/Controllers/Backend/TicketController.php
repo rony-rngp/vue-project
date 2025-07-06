@@ -59,7 +59,7 @@ class TicketController extends Controller
      */
     public function show(string $id)
     {
-        $ticket = Ticket::with('contact')->first();
+        $ticket = Ticket::with('contact')->find($id);
         return Inertia::render('admin/ticket/details',[
             'ticket' => $ticket,
         ]);

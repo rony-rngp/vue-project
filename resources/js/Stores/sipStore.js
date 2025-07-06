@@ -102,7 +102,7 @@ export const useSipStore = defineStore('sip', () => {
     // Find contact by caller ID
     const findContact = async (callerId) => {
         try {
-            const response = await axios.get(`/admin/contacts-info-api/${callerId}`)
+            const response = await axios.get(route('admin.contacts.caller_api', callerId))
             return response.data
         } catch (error) {
             console.error('Error finding contact:', error)
@@ -142,17 +142,29 @@ export const useSipStore = defineStore('sip', () => {
     };
 
     // Save new contact
+
+    const isLoading = ref(false);
     const saveContact = async (data) => {
+
+        isLoading.value = true;
+
         try {
-            const response = await axios.post('/admin/contacts-store-api', data)
-            currentCaller.value = response.data
-            return { status: true, message: 'Contact added successfully' };
+            const response = await axios.post(route('admin.contacts.caller_store_api'), data)
+            const res =  response.data;
+            if (res.status === true){
+                currentCaller.value = res.contact;
+                return { status: true, message: 'Contact added successfully' };
+            }else{
+                return { status: false, message: res.message };
+            }
+
         } catch (error) {
             let regErrorMsg = ApiErrorHandler.getMessage(error);
             return { status: false, message: regErrorMsg };
+        }finally {
+            isLoading.value = false;
         }
     }
-
 
 
 
@@ -175,6 +187,7 @@ export const useSipStore = defineStore('sip', () => {
         saveContact,
         findContact,
         fromCall,
-        findContactLoading
+        findContactLoading,
+        isLoading
     }
 })

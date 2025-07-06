@@ -7,9 +7,9 @@ use Inertia\Inertia;
 //    return view('welcome');
 //});
 
-Route::inertia('/', 'frontend/Home');
-Route::inertia('/about', 'About');
-Route::inertia('/contact', 'Contact');
+Route::inertia('/', 'frontend/Home')->name('home_page');
+Route::inertia('/about', 'About')->name('about');
+Route::inertia('/contact', 'Contact')->name('contact');
 
 Route::match(['get', 'post'],'/login', [\App\Http\Controllers\Frontend\AuthController::class, 'login'])->name('login');
 Route::match(['get', 'post'],'/register', [\App\Http\Controllers\Frontend\AuthController::class, 'register'])->name('register');
@@ -33,7 +33,9 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function (){
     Route::middleware(['auth', 'admin'])->group(function (){
       Route::get('dashboard', [\App\Http\Controllers\Backend\AuthController::class, 'dashboard'])->name('dashboard');
 
-      Route::get('sip', [\App\Http\Controllers\Backend\AuthController::class, 'sip'])->name('sip');
+      Route::get('call-history', [\App\Http\Controllers\Backend\AuthController::class, 'sip'])->name('call_history');
+
+      Route::get('search-caller', [\App\Http\Controllers\Backend\AuthController::class, 'search_caller'])->name('search_caller');
 
       //user routes
       Route::resource('users', \App\Http\Controllers\Backend\UserController::class);
@@ -64,13 +66,13 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function (){
             return inertia('admin/global/CallPage', [
                 'callerId' => $request->query('callerId')
             ]);
-        });
+        })->name('current_caller_info');
 
         //ticket routes
-        Route::get('tickets-by-caller/{id}', [\App\Http\Controllers\Backend\TicketController::class, 'getCallerTicketList']);
-        Route::get('tickets-details/{id}', [\App\Http\Controllers\Backend\TicketController::class, 'getTicketDetails']);
-        Route::post('tickets-store', [\App\Http\Controllers\Backend\TicketController::class, 'ticketStore']);
-        Route::post('tickets-status-update', [\App\Http\Controllers\Backend\TicketController::class, 'updateTicketStatus']);
+        Route::get('tickets-by-caller/{id}', [\App\Http\Controllers\Backend\TicketController::class, 'getCallerTicketList'])->name('getCallerTicketList');
+        Route::get('tickets-details/{id}', [\App\Http\Controllers\Backend\TicketController::class, 'getTicketDetails'])->name('getTicketDetails');
+        Route::post('tickets-store', [\App\Http\Controllers\Backend\TicketController::class, 'ticketStore'])->name('ticketStore');
+        Route::post('tickets-status-update', [\App\Http\Controllers\Backend\TicketController::class, 'updateTicketStatus'])->name('updateTicketStatus');
         Route::resource('tickets', \App\Http\Controllers\Backend\TicketController::class);
 
       //settings route

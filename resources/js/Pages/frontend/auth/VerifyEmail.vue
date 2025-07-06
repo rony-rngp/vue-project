@@ -14,7 +14,7 @@ const form = useForm({
 });
 
 const submit = ()=>{
-    form.post('/email-verify');
+    form.post(route('email_verify'));
 }
 
 const data = useForm({
@@ -38,7 +38,7 @@ const startCountdown = () => {
 // Send OTP and start countdown
 const resend = () => {
     if (countdown.value > 0) return;
-    data.post('/resend-otp', {
+    data.post(route('resend_otp'), {
         onSuccess: () => {
             startCountdown();
         }

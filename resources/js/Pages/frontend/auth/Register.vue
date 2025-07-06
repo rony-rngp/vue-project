@@ -22,7 +22,7 @@ const form = useForm({
 });
 
 const submit = ()=>{
-    form.post('/register');
+    form.post(route('register'));
 }
 
 </script>
@@ -43,11 +43,11 @@ const submit = ()=>{
                                 <div class="card-body">
                                     <!-- Logo -->
                                     <div class="app-brand justify-content-center mb-6">
-                                        <a href="{{ url('/') }}" class="app-brand-link gap-2">
+                                        <Link :href="route('home_page')" class="app-brand-link gap-2">
                                         <span class="app-brand-logo demo">
                                           </span>
                                             <span class="app-brand-text demo text-heading fw-bold">{{ getSettings('website_name') }}</span>
-                                        </a>
+                                        </Link>
                                     </div>
                                     <!-- /Logo -->
                                     <h4 class="mb-1">Adventure starts here  👋🚀</h4>
@@ -153,7 +153,7 @@ const submit = ()=>{
                                     <p class="text-center">
                                         <span>Already have an account?</span>
 
-                                        <Link style="margin-left: 5px" href="/login">
+                                        <Link style="margin-left: 5px" :href="route('login')">
                                             <span>Login</span>
                                         </Link>
                                     </p>

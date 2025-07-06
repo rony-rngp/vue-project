@@ -209,9 +209,10 @@ const handleStatusChange = async () => {
                                     <button
                                         type="submit"
                                         class="btn btn-primary"
-                                        :disabled="!name || !caller_id"
+                                        :disabled="!name || !caller_id || sipStore.isLoading"
                                     >
-                                        Save Contact
+                                        <span v-if="!sipStore.isLoading">Submit</span>
+                                        <span v-else>Please wait</span>
                                     </button>
                                 </div>
                             </div>

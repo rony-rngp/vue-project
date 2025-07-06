@@ -13,6 +13,7 @@ return new class extends Migration
     {
         Schema::create('contacts', function (Blueprint $table) {
             $table->id();
+            $table->integer('odoo_contact_id')->nullable();
             $table->string('name');
             $table->string('caller_id')->unique(); // This will store the phone number
             $table->string('email')->nullable();

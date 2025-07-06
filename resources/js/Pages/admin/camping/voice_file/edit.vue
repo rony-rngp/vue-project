@@ -16,8 +16,6 @@ const handleFileUpload = (e) => {
 };
 
 const submit = ()=>{
-    console.log("Submitting:", form.name, form.file);
-
     form.post(route('admin.voice-file.update', props.voice_file.id));
 }
 

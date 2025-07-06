@@ -18,7 +18,7 @@ const {getSettings} = useSettings();
                     <!-- Mobile menu toggle: Start-->
 
                     <!-- Mobile menu toggle: End-->
-                    <Link href="/" class="app-brand-link">
+                    <Link :href="route('home_page')" class="app-brand-link">
                       <span class="app-brand-logo demo">
 
                               <img src="" alt="">
@@ -60,10 +60,10 @@ const {getSettings} = useSettings();
                                 <div class="dropdown-divider my-1"></div>
                             </li>
                             <li>
-                                <Link v-if="$page.props.auth.user.user_type == 'admin'" class="dropdown-item" href="/admin/dashboard">
+                                <Link v-if="$page.props.auth.user.user_type == 'admin'" class="dropdown-item" :href="route('admin.dashboard')">
                                     <i class="bx bxs-dashboard bx-md me-3"></i><span>Dashboard</span>
                                 </Link>
-                                <Link v-else class="dropdown-item" href="/user/dashboard">
+                                <Link v-else class="dropdown-item" :href="route('user.dashboard')">
                                     <i class="bx bxs-dashboard bx-md me-3"></i><span>Dashboard</span>
                                 </Link>
                             </li>
@@ -72,7 +72,7 @@ const {getSettings} = useSettings();
                                 <div class="dropdown-divider my-1"></div>
                             </li>
                             <li>
-                                <Link class="dropdown-item"  href="/logout" method="post">
+                                <Link class="dropdown-item"  :href="route('logout')" method="post">
                                     <i class="bx bx-power-off bx-md me-3"></i><span>Log Out</span>
                                 </Link>
 
@@ -81,7 +81,7 @@ const {getSettings} = useSettings();
                     </li>
                     <!--/ User -->
 
-                    <Link v-if="!$page.props.auth.user" href="/login" class="btn btn-primary me-4">
+                    <Link v-if="!$page.props.auth.user" :href="route('login')" class="btn btn-primary me-4">
                         <span class="tf-icons bx bx-log-in-circle scaleX-n1-rtl me-md-1"></span>
                         <span class="d-none d-md-block">Login/Register</span>
                     </Link>

@@ -8,7 +8,7 @@ const {getSettings} = useSettings();
 
     <aside id="layout-menu" class="layout-menu menu-vertical menu bg-menu-theme">
         <div class="app-brand demo">
-            <a href="" class="app-brand-link">
+            <Link :href="route('admin.dashboard')" class="app-brand-link">
                     <span class="app-brand-logo demo">
                     <svg
                         width="25"
@@ -59,7 +59,7 @@ const {getSettings} = useSettings();
                     </svg>
                   </span>
                 <span class="app-brand-text demo menu-text fw-bold ms-2">{{ getSettings('website_name')}}</span>
-            </a>
+            </Link>
 
             <a href="javascript:void(0);" class="layout-menu-toggle menu-link text-large ms-auto d-block d-xl-none">
                 <i class="bx bx-chevron-left bx-sm d-flex align-items-center justify-content-center"></i>
@@ -71,21 +71,21 @@ const {getSettings} = useSettings();
         <ul class="menu-inner py-1">
 
             <li class="menu-item mt-6" :class="$page.url === '/admin/dashboard' ? 'active' : ''">
-                <Link href="/admin/dashboard" class="menu-link">
+                <Link :href="route('admin.dashboard')" class="menu-link">
                     <i class="menu-icon tf-icons bx bx-home-smile"></i>
                     <div class="text-truncate">Dashboard</div>
                 </Link>
             </li>
 
-            <li class="menu-item" :class="$page.url.startsWith('/admin/sip') ? 'active' : ''">
-                <Link href="/admin/sip" class="menu-link">
+            <li class="menu-item" :class="$page.url.startsWith('/admin/call-history') ? 'active' : ''">
+                <Link :href="route('admin.call_history')" class="menu-link">
                     <i class="menu-icon tf-icons bx bx-phone-call"></i>
-                    <div class="text-truncate">Sip</div>
+                    <div class="text-truncate">Call History</div>
                 </Link>
             </li>
 
             <li class="menu-item" :class="$page.url.startsWith('/admin/users') ? 'active' : ''">
-                <Link href="/admin/users" class="menu-link">
+                <Link :href="route('admin.users.index')" class="menu-link">
                     <i class="menu-icon tf-icons bx bx-user"></i>
                     <div class="text-truncate">User</div>
                 </Link>
@@ -126,7 +126,7 @@ const {getSettings} = useSettings();
             </li>
 
             <li class="menu-item " :class="{'active' : $page.url.startsWith('/admin/settings')}">
-                <Link href="/admin/settings" class="menu-link" >
+                <Link :href="route('admin.settings')" class="menu-link" >
                     <i class="menu-icon tf-icons bx bx-cog"></i>
                     <div class="text-truncate">Settings</div>
                 </Link>
@@ -134,7 +134,7 @@ const {getSettings} = useSettings();
 
 
             <li class="menu-item ">
-                <Link  class="menu-link" href="/logout" method="post" style="border: 0; background: none; width: 100%">
+                <Link  class="menu-link" :href="route('logout')" method="post" style="border: 0; background: none; width: 100%">
                     <i class="menu-icon tf-icons bx bx-power-off"></i>
                     <div class="text-truncate">Log Out</div>
                 </Link>

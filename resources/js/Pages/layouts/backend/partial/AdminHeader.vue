@@ -1,11 +1,22 @@
 <script setup>
 
 import {useSipStore} from "../../../../Stores/sipStore.js";
-import {onMounted} from "vue";
+import {onMounted, ref} from "vue";
+import {useForm} from "@inertiajs/vue3";
 
 const sipStore = useSipStore();
 
+const form = useForm({
+    caller: null,
+});
 
+const submit = ()=>{
+    if (form.caller){
+        form.get(route('admin.search_caller'));
+    }
+
+
+}
 
 </script>
 
@@ -21,10 +32,12 @@ const sipStore = useSipStore();
         <div class="navbar-nav-right d-flex align-items-center" id="navbar-collapse">
             <!-- Search -->
             <div class="navbar-nav align-items-center">
-                <div class="nav-item d-flex align-items-center">
-                    <i class="bx bx-search bx-md"></i>
-                    <input type="text" class="form-control border-0 shadow-none ps-1 ps-sm-2" placeholder="Search..." aria-label="Search..." />
-                </div>
+                <form @submit.prevent="submit">
+                    <div class="nav-item d-flex align-items-center">
+                        <i class="bx bx-search bx-md"></i>
+                        <input type="text" v-model="form.caller" class="form-control border-0 shadow-none ps-1 ps-sm-2" placeholder="Search..." aria-label="Search..." />
+                    </div>
+                </form>
             </div>
             <!-- /Search -->
 

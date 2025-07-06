@@ -636,7 +636,7 @@ onMounted(async () => {
                         return;
                     }
 
-                    router.visit(`/admin/current-caller-info?callerId=${encodeURIComponent(fromNumber)}`);
+                    router.visit(`${route('admin.current_caller_info')}?callerId=${encodeURIComponent(fromNumber)}`);
 
                     currentCallId.value = Date.now();
                     const callRecord = {

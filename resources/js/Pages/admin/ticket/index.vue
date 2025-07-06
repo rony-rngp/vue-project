@@ -48,7 +48,7 @@ const confirmDelete = (id) => {
                                 <tbody class="table-border-bottom-0">
                                 <tr v-for="ticket in tickets.data">
                                     <td>{{ ticket.ticket_no }}</td>
-                                    <td>{{ ticket.contact?.name +' ('+ ticket.contact?.caller_id +')'}}</td>
+                                    <td>{{ ticket.contact ? ticket.contact?.name +' ('+ ticket.contact?.caller_id +')' : '-'}}</td>
                                     <td>{{ ticket.subject }}</td>
                                     <td>{{ ticket.status }}</td>
 
