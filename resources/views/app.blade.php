@@ -24,7 +24,7 @@
     <!-- Page CSS -->
     <style>
         .border-bottom{
-            border-bottom: 1px solid #E4E6E8;
+            border-bottom: 1px solid #E4E6E8 !important;
         }
     </style>
     <!-- Helpers -->

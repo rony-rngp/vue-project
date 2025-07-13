@@ -118,6 +118,13 @@ const {getSettings} = useSettings();
                 </ul>
             </li>
 
+            <li class="menu-item" :class="$page.url.startsWith('/admin/contacts') ? 'active' : ''">
+                <Link :href="route('admin.contacts.index')" class="menu-link">
+                    <i class="menu-icon tf-icons bx bxs-contact"></i>
+                    <div class="text-truncate">Contact List</div>
+                </Link>
+            </li>
+
             <li class="menu-item" :class="$page.url.startsWith('/admin/tickets') ? 'active' : ''">
                 <Link :href="route('admin.tickets.index')" class="menu-link">
                     <i class="menu-icon tf-icons bx bx-tag"></i>
@@ -129,6 +136,13 @@ const {getSettings} = useSettings();
                 <Link :href="route('admin.leads.index')" class="menu-link">
                     <i class="menu-icon tf-icons bx bx-list-ul"></i>
                     <div class="text-truncate">Leads</div>
+                </Link>
+            </li>
+
+            <li class="menu-item" :class="$page.url.startsWith('/admin/conversations') ? 'active' : ''">
+                <Link :href="route('admin.conversations.index')" class="menu-link">
+                    <i class="menu-icon tf-icons bx bx-message"></i>
+                    <div class="text-truncate">Conversations</div>
                 </Link>
             </li>
 

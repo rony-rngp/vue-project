@@ -54,6 +54,7 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function (){
         Route::post('campaigns/{campaign}/pause', [\App\Http\Controllers\Backend\CampaignController::class, 'pause'])->name('campaigns.pause');
         Route::post('campaigns/{campaign}/resume', [\App\Http\Controllers\Backend\CampaignController::class, 'resume'])->name('campaigns.resume');
 
+        //contact api
         Route::controller(\App\Http\Controllers\Backend\ContactController::class)->group(function (){
             Route::get('contacts-info-api/{caller}', 'contact_info_api')->name('contacts.caller_api');
             Route::post('contacts-store-api', 'contact_store_api')->name('contacts.caller_store_api');
@@ -78,8 +79,28 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function (){
         //airtable lead
         Route::get('leads', [\App\Http\Controllers\Backend\LeadController::class, 'index'])->name('leads.index');
 
+        Route::controller(\App\Http\Controllers\Backend\ConversationController::class)->group(function (){
+           Route::get('conversations', 'index')->name('conversation.index');
+        });
 
-      //settings route
+        //conversation
+        Route::controller(\App\Http\Controllers\Backend\ConversationController::class)->group(function (){
+            Route::get('conversations', 'index')->name('conversations.index');
+            Route::get('conversations/show/{id}', 'show')->name('conversations.show');
+            Route::delete('conversations/destroy/{id}', 'destroy')->name('conversations.destroy');
+        });
+
+        Route::controller(\App\Http\Controllers\Backend\ContactController::class)->group(function (){
+            Route::get('contacts', 'index')->name('contacts.index');
+            Route::get('contacts/create', 'create')->name('contacts.create');
+            Route::post('contacts/create', 'store')->name('contacts.store');
+            Route::get('contacts/edit/{id}', 'edit')->name('contacts.edit');
+            Route::post('contacts/update/{id}', 'update')->name('contacts.update');
+            Route::delete('contacts/destroy/{id}', 'destroy')->name('contacts.destroy');
+        });
+
+
+        //settings route
         Route::match(['get', 'post'], '/settings', [\App\Http\Controllers\Backend\SettingController::class, 'settings'])->name('settings');
 
     });

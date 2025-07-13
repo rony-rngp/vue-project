@@ -142,6 +142,32 @@ class OdooService
         return null;
     }
 
+    public function updateContact(int $id, array $data): bool
+    {
+        $data = array_filter($data, fn($value) => !is_null($value) && $value !== '');
+        $result = $this->object->execute_kw(
+            $this->db,
+            $this->uid,
+            $this->password,
+            'res.partner',
+            'write',
+            [[$id], $data]
+        );
+        return $result !== false;
+    }
+
+    public function deleteContact(int $id): bool
+    {
+        return $this->object->execute_kw(
+            $this->db,
+            $this->uid,
+            $this->password,
+            'res.partner',
+            'unlink',
+            [[$id]]
+        );
+    }
+
     private function generateNumberVariants(string $number): array
     {
         $variants = [];
