@@ -75,9 +75,17 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function (){
         Route::post('tickets-status-update', [\App\Http\Controllers\Backend\TicketController::class, 'updateTicketStatus'])->name('updateTicketStatus');
         Route::resource('tickets', \App\Http\Controllers\Backend\TicketController::class);
 
+        //airtable lead
+        Route::get('leads', [\App\Http\Controllers\Backend\LeadController::class, 'index'])->name('leads.index');
+
+
       //settings route
         Route::match(['get', 'post'], '/settings', [\App\Http\Controllers\Backend\SettingController::class, 'settings'])->name('settings');
 
     });
 
 });
+
+
+//endpoint
+Route::post('handel-conversation', [\App\Http\Controllers\Backend\ConversationController::class, 'handel_conversation']);

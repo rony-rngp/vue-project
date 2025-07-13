@@ -125,6 +125,13 @@ const {getSettings} = useSettings();
                 </Link>
             </li>
 
+            <li class="menu-item" :class="$page.url.startsWith('/admin/leads') ? 'active' : ''">
+                <Link :href="route('admin.leads.index')" class="menu-link">
+                    <i class="menu-icon tf-icons bx bx-list-ul"></i>
+                    <div class="text-truncate">Leads</div>
+                </Link>
+            </li>
+
             <li class="menu-item " :class="{'active' : $page.url.startsWith('/admin/settings')}">
                 <Link :href="route('admin.settings')" class="menu-link" >
                     <i class="menu-icon tf-icons bx bx-cog"></i>
