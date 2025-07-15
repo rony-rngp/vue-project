@@ -1,8 +1,10 @@
 <script setup>
 import {Head, useForm} from "@inertiajs/vue3";
+import Pagination from "../../Pagination.vue";
 
 defineProps({
     ticket: Object,
+    ticket_conversations: Object,
 });
 
 
@@ -20,7 +22,7 @@ defineProps({
 
 
                 <div class="col-md-12">
-                    <div class="card">
+                    <div class="card mb-4">
                         <div class="d-flex justify-content-between align-items-center border-bottom" >
                             <h5 class="card-header">Ticket Details</h5>
                             <div class="me-5">
@@ -44,6 +46,47 @@ defineProps({
 
 
                     </div>
+
+                    <div class="card">
+                        <div class="d-flex justify-content-between align-items-center" >
+                            <h5 class="card-header">Conversation History</h5>
+                        </div>
+                        <div class="table-responsive ">
+                            <table class="table table-bordered">
+                                <thead>
+                                <tr>
+                                    <th style="max-width: 8%">ID</th>
+                                    <th>Transcription</th>
+                                </tr>
+                                </thead>
+                                <tbody class="table-border-bottom-0">
+                                <tr v-for="conversation in ticket_conversations.data">
+                                    <td>{{ conversation.id }}</td>
+                                    <td>
+                                        <div class="conversation_data" v-if="JSON.parse(conversation.transcription)">
+                                            <div v-for="(chunk, index) in JSON.parse(conversation.transcription)" :key="index" class="d-flex mb-3">
+                                                <div>
+                                                    <div :class="chunk.speaker === 0 ? 'bg-primary text-white p-3 rounded-3' : 'bg-light text-dark p-3 rounded-3'">
+                                                        <strong>Speaker {{ chunk.speaker }} : </strong>
+                                                        <span>{{ chunk.text }}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div v-else>
+                                            {{ conversation.transcription }}
+                                        </div>
+                                    </td>
+
+
+                                </tr>
+                                </tbody>
+                            </table>
+                            <div class="mt-3 float-end me-5" >
+                                <Pagination :links="ticket_conversations.links" />
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -52,5 +95,11 @@ defineProps({
 </template>
 
 <style scoped>
-
+.card-header{
+    padding: 12px 17px;
+}
+.conversation_data{
+    max-height: 500px;
+    overflow: auto;
+}
 </style>

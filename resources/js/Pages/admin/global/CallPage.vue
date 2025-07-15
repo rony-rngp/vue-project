@@ -94,6 +94,7 @@ const storeTicket = async () => {
     const response = await ticketStore.saveTicket(ticketData)
 
     if (response.status === true) {
+        sipStore.updateCurrentCallerTicket(response.ticket_id);
         toast.success(response.message,{
             position: 'top-right',
             duration: 5000
@@ -136,6 +137,41 @@ const handleStatusChange = async () => {
         selectedStatus.value = ticketStore.ticketDetails?.status || '';
     }
 };
+
+const assignTicket = async (id, current) => {
+
+    let msg = "";
+    if(current){
+         msg = "Are you sure you want to remove the assignment from this ticket?";
+    }else{
+
+         msg = "Are you sure you want to assign this ticket?";
+    }
+
+    const confirmed = window.confirm(msg);
+
+    if (confirmed) {
+        const result = await ticketStore.assignTicket(id, sipStore.currentCaller.id);
+
+        if (result.status) {
+            sipStore.updateCurrentCallerTicket(id);
+
+            toast.success(result.message, {
+                position: 'top-right',
+                duration: 5000
+            });
+        } else {
+            toast.error(result.message, {
+                position: 'top-right',
+                duration: 5000
+            });
+        }
+    }
+};
+
+const refreshTicket = () => {
+     ticketStore.getCallerTicketList(sipStore.currentCaller.id);
+}
 
 </script>
 
@@ -233,6 +269,7 @@ const handleStatusChange = async () => {
 
                     <div class="d-flex  align-items-center" >
                         <h5 class="card-header">Ticket List</h5>
+
                         <div class="me-5">
                             <button v-if="sipStore.currentCaller"
                                 type="button"
@@ -241,6 +278,11 @@ const handleStatusChange = async () => {
                                 data-bs-target="#addTicketModal"
                             >
                                 Add Ticket
+                            </button>
+                        </div>
+                        <div class="me-5">
+                            <button title="Refresh" class="btn btn-sm btn-warning" @click="refreshTicket">
+                                <i class="bx bx-refresh"></i>
                             </button>
                         </div>
                     </div>
@@ -261,6 +303,10 @@ const handleStatusChange = async () => {
                                 <td>{{ ticket.subject }}</td>
                                 <td>{{ ticket.status }}</td>
                                 <td>
+
+                                    <button  v-if="sipStore.currentCaller.current_ticket === ticket.id" @click.prevent="assignTicket(ticket.id, true)" class="btn btn-sm btn-secondary me-2">Assigned</button>
+                                    <button v-else @click.prevent="assignTicket(ticket.id, false)" class="btn btn-sm btn-primary me-2">Assign</button>
+
                                     <button
                                         type="button"
                                         class="btn btn-sm btn-success"

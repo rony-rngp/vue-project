@@ -47,8 +47,9 @@ export const useTicketStore = defineStore('ticket', () => {
         isLoading.value = true;
         try {
             const response = await axios.post(route('admin.ticketStore', data))
+
             await getCallerTicketList(data.contact_id);
-            return { status: true, message: 'Ticket added successfully' };
+            return { status: true, message: 'Ticket added successfully', ticket_id: response.data };
         } catch (error) {
             let regErrorMsg = ApiErrorHandler.getMessage(error);
             return { status: false, message: regErrorMsg };
@@ -87,6 +88,20 @@ export const useTicketStore = defineStore('ticket', () => {
         }
     }
 
+    const assignTicket = async (ticketID, current_contact) => {
+        isLoading.value = true;
+        try {
+            const response = await axios.get(route('admin.assignTicket', ticketID))
+            return { status: true, message: response.data };
+        } catch (error) {
+            let regErrorMsg = ApiErrorHandler.getMessage(error);
+            return { status: false, message: regErrorMsg };
+        }finally {
+            isLoading.value = false;
+        }
+    }
+
+
 
     return {
         callerTicketList,
@@ -96,6 +111,7 @@ export const useTicketStore = defineStore('ticket', () => {
         saveTicket,
         isLoading,
         showTicketLoading,
-        updateTicketStatus
+        updateTicketStatus,
+        assignTicket
     }
 })

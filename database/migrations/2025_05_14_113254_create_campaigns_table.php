@@ -22,7 +22,7 @@ return new class extends Migration
             $table->string('process_status')->nullable();
             $table->integer('total_numbers')->default(0);
             $table->integer('processed_numbers')->default(0);
-            $table->enum('status', ['not_started', 'running', 'paused', 'completed'])->default('draft');
+            $table->enum('status', ['not_started', 'running', 'paused', 'completed'])->default('not_started');
             $table->json('dtmf_options')->nullable(); // Example: {"1": "Transfer", "2": "Repeat"}
             $table->timestamp('completed_at')->nullable();
             $table->timestamps();

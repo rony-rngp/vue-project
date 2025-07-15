@@ -11,9 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('call_records', function (Blueprint $table) {
+        Schema::create('ticket_conversations', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('conversation_id')->constrained()->onDelete('cascade');
+            $table->foreignId('ticket_id')->constrained()->onDelete('cascade');
             $table->string('call_id');
             $table->string('recording_url');
             $table->text('transcription')->nullable();
@@ -26,6 +26,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('call_records');
+        Schema::dropIfExists('ticket_conversations');
     }
 };

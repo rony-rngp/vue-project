@@ -166,7 +166,14 @@ export const useSipStore = defineStore('sip', () => {
         }
     }
 
+    const updateCurrentCallerTicket = (ticketID) => {
+        if(currentCaller.value.current_ticket === ticketID){
+            currentCaller.value.current_ticket = null;
+        }else{
+            currentCaller.value.current_ticket = ticketID;
+        }
 
+    }
 
     return {
         isDND,
@@ -188,6 +195,7 @@ export const useSipStore = defineStore('sip', () => {
         findContact,
         fromCall,
         findContactLoading,
-        isLoading
+        isLoading,
+        updateCurrentCallerTicket
     }
 })

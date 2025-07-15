@@ -54,6 +54,12 @@ const confirmDelete = (id) => {
                                     <td>
 
                                         <Link
+                                            :href="`${route('admin.current_caller_info')}?callerId=${encodeURIComponent(contact.caller_id)}`"
+                                            class="btn btn-sm btn-info me-2">
+                                            <i class="bx bx-detail"></i>
+                                        </Link>
+
+                                        <Link
                                             :href="route('admin.contacts.edit', contact.id)"
                                             class="btn btn-sm btn-primary me-2">
                                             <i class="bx bx-edit"></i>

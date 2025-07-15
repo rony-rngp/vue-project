@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Backend;
 use App\Http\Controllers\Controller;
 use App\Models\Contact;
 use App\Models\Ticket;
+use App\Models\TicketConversation;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -60,8 +61,10 @@ class TicketController extends Controller
     public function show(string $id)
     {
         $ticket = Ticket::with('contact')->find($id);
+        $ticket_conversations = TicketConversation::where('ticket_id', $ticket->id)->latest()->paginate(20);
         return Inertia::render('admin/ticket/details',[
             'ticket' => $ticket,
+            'ticket_conversations' => $ticket_conversations,
         ]);
     }
 
@@ -112,7 +115,7 @@ class TicketController extends Controller
 
     public function getCallerTicketList($id)
     {
-        $tickets = Ticket::where('contact_id', $id)->latest()->take(10)->get();
+        $tickets = Ticket::where('contact_id', $id)->latest()->take(50)->get();
         return response()->json($tickets);
     }
 
@@ -136,7 +139,11 @@ class TicketController extends Controller
         $ticket->description = $request->description;
         $ticket->save();
 
-        return response()->json('Ticket added successfully');
+        $contact = Contact::find($ticket->contact_id);
+        $contact->current_ticket = $ticket->id;
+        $contact->save();
+
+        return response()->json($ticket->id);
     }
 
     public function updateTicketStatus(Request $request)
@@ -145,5 +152,23 @@ class TicketController extends Controller
         $ticket->status = $request->status;
         $ticket->save();
         return response()->json($ticket);
+    }
+
+    public function assignTicket($id)
+    {
+        $ticket = Ticket::find($id);
+
+        $contact = Contact::find($ticket->contact_id);
+
+        if ($contact->current_ticket == $ticket->id){
+            $contact->current_ticket = null;
+            $contact->save();
+            return response()->json('Ticket has been unassigned from the user.');
+        }else{
+            $contact->current_ticket = $ticket->id;
+            $contact->save();
+            return response()->json('Ticket assigned successfully.');
+        }
+
     }
 }

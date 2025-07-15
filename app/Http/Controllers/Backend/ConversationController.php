@@ -7,6 +7,8 @@ use App\Jobs\ProcessCallTranscription;
 use App\Models\CallRecord;
 use App\Models\Contact;
 use App\Models\Conversation;
+use App\Models\Ticket;
+use App\Models\TicketConversation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Inertia\Inertia;
@@ -25,41 +27,39 @@ class ConversationController extends Controller
 
         $contact = Contact::where('caller_id', $caller)->first();
 
-        $conversation = Conversation::where('caller', $caller)->first();
-        if ($conversation != null){
-            $conversation->contact_id = $contact != null ? $contact->id : null;
-            $conversation->save();
+        $current_ticket = Ticket::where('id', $contact->current_ticket)->first();
+
+        if ($current_ticket){
+            $ticket_conversation = new TicketConversation();
+            $ticket_conversation->ticket_id = $current_ticket->id;
+            $ticket_conversation->call_id = $callId;
+            $ticket_conversation->recording_url = $recordingUrl;
+            $ticket_conversation->save();
+
+            ProcessCallTranscription::dispatch($ticket_conversation->id);
+
+            return response()->json([
+                'message' => 'Ticket Conversation saved. Transcription queued.',
+                'ticket_id' => $current_ticket->id,
+                'TicketConversation' => $ticket_conversation->id
+            ]);
         }else{
-            $conversation = new Conversation();
-            $caller->caller = $request->caller;
-            $caller->contact_id = $contact != null ? $contact->id : null;
-            $caller->save();
+            return response()->json([
+                'message' => 'No ticket selected',
+            ]);
         }
 
-        $callRecord = new CallRecord();
-        $callRecord->conversation_id = $conversation->id;
-        $callRecord->call_id = $callId;
-        $callRecord->recording_url = $recordingUrl;
-        $callRecord->save();
-
-        ProcessCallTranscription::dispatch($callRecord->id);
-
-        return response()->json([
-            'message' => 'Call record saved. Transcription queued.',
-            'conversation_id' => $conversation->id,
-            'call_record_id' => $callRecord->id
-        ]);
     }
 
     public function index()
     {
         $conversations = Conversation::with('contact')->withCount('call_records')->latest()->paginate('10');
-        return Inertia::render('admin/conversations/index',[
+        return Inertia::render('admin/conversations/index', [
             'conversations' => $conversations
         ]);
     }
 
-    public function show($id)
+    /*public function show($id)
     {
         $conversation = Conversation::with('contact')->find($id);
         $call_records = CallRecord::where('conversation_id', $conversation->id)->latest()->paginate(20);
@@ -67,7 +67,7 @@ class ConversationController extends Controller
             'conversation' => $conversation,
             'call_records' => $call_records,
         ]);
-    }
+    }*/
 
 
 }

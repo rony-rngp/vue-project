@@ -15,10 +15,11 @@ return new class extends Migration
             $table->id();
             $table->integer('odoo_contact_id')->nullable();
             $table->string('name');
-            $table->string('caller_id')->unique(); // This will store the phone number
+            $table->string('caller_id')->unique();
             $table->string('email')->nullable();
             $table->text('description')->nullable();
             $table->foreignId('user_id')->constrained();
+            $table->integer('current_ticket')->nullable();
             $table->timestamps();
         });
     }

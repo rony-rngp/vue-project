@@ -74,6 +74,7 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function (){
         Route::get('tickets-details/{id}', [\App\Http\Controllers\Backend\TicketController::class, 'getTicketDetails'])->name('getTicketDetails');
         Route::post('tickets-store', [\App\Http\Controllers\Backend\TicketController::class, 'ticketStore'])->name('ticketStore');
         Route::post('tickets-status-update', [\App\Http\Controllers\Backend\TicketController::class, 'updateTicketStatus'])->name('updateTicketStatus');
+        Route::get('tickets-assign/{id}', [\App\Http\Controllers\Backend\TicketController::class, 'assignTicket'])->name('assignTicket');
         Route::resource('tickets', \App\Http\Controllers\Backend\TicketController::class);
 
         //airtable lead
