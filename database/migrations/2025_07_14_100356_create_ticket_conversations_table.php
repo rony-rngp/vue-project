@@ -16,7 +16,7 @@ return new class extends Migration
             $table->foreignId('ticket_id')->constrained()->onDelete('cascade');
             $table->string('call_id');
             $table->string('recording_url');
-            $table->text('transcription')->nullable();
+            $table->longText('transcription')->nullable();
             $table->timestamps();
         });
     }

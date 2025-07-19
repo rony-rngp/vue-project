@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Backend;
 
+use App\Events\CallTranscriptionLive;
 use App\Http\Controllers\Controller;
 use App\Jobs\ProcessCallTranscription;
 use App\Models\CallRecord;
@@ -69,5 +70,11 @@ class ConversationController extends Controller
         ]);
     }*/
 
+    public function live_transcription(Request $request)
+    {
+        $text = $request->input('text');
+        info('Received transcript: ' . $text);
+        event(new CallTranscriptionLive($text));
+    }
 
 }

@@ -111,3 +111,4 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function (){
 
 //endpoint
 Route::post('handel-conversation', [\App\Http\Controllers\Backend\ConversationController::class, 'handel_conversation']);
+Route::post('live-transcription', [\App\Http\Controllers\Backend\ConversationController::class, 'live_transcription']);
